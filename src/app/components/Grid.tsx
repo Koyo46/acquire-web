@@ -7,15 +7,22 @@ export default function Grid() {
   const rowLabels = "ABCDEFGHI".split(""); // A～I のラベル
   const colLabels = Array.from({ length: cols }, (_, i) => i + 1); // 1～12 のラベル
 
-  // タイルの状態を管理する useState
-  const [selectedTiles, setSelectedTiles] = useState<{ [key: string]: boolean }>({});
+  // 配置されたタイルのリスト（タイルの位置情報を保持）
+  const [placedTiles, setPlacedTiles] = useState<{ col: number; row: string }[]>([]);
 
   // タイルをクリックしたときの処理
-  const handleTileClick = (tileKey: string) => {
-    setSelectedTiles((prev) => ({
-      ...prev,
-      [tileKey]: !prev[tileKey], // クリックでON/OFFを切り替え
-    }));
+  const handleTileClick = (col: number, row: string) => {
+    setPlacedTiles((prev) => {
+      const exists = prev.some((tile) => tile.col === col && tile.row === row);
+
+      if (exists) {
+        // すでに配置されているなら削除
+        return prev.filter((tile) => !(tile.col === col && tile.row === row));
+      } else {
+        // 新しく配置
+        return [...prev, { col, row }];
+      }
+    });
   };
 
   return (
@@ -29,7 +36,7 @@ export default function Grid() {
           </div>
         ))}
         {/* グリッド本体 */}
-        {rowLabels.map((row, rowIndex) => (
+        {rowLabels.map((row) => (
           <React.Fragment key={`row-${row}`}>
             {/* 行ラベル */}
             <div className="flex items-center justify-center h-10 font-bold">
@@ -38,17 +45,16 @@ export default function Grid() {
 
             {/* セル */}
             {colLabels.map((col) => {
-              const tileKey = `${col}${row}`;
-              const isSelected = selectedTiles[tileKey] || false;
+              const isSelected = placedTiles.some((tile) => tile.col === col && tile.row === row);
 
               return (
                 <div
-                  key={tileKey}
+                  key={`cell-${col}${row}`}
                   className={`w-10 h-10 flex items-center justify-center border border-gray-400 cursor-pointer ${isSelected ? "bg-blue-400 text-white" : "bg-white hover:bg-gray-200"
                     }`}
-                  onClick={() => handleTileClick(tileKey)}
+                  onClick={() => handleTileClick(col, row)}
                 >
-                  {tileKey}
+                  {col}{row}
                 </div>
               );
             })}
