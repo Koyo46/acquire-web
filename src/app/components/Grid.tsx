@@ -11,7 +11,7 @@ export default function Grid() {
   const [placedTiles, setPlacedTiles] = useState<{ col: number; row: string }[]>([]);
 
   // ホテルのリスト
-  const [hotels, setHotels] = useState<{ name: string; tiles: { col: number; row: string }[] }[]>([]);
+  const [hotels, setHotels] = useState<{ key: number; name: string; tiles: { col: number; row: string }[] }[]>([]);
 
   // 隣接するタイルを取得
   const getAdjacentTiles = (col: number, row: string) => {
@@ -66,8 +66,13 @@ export default function Grid() {
             return { col, row };
           });
 
+          // 最も大きいホテルの名前を使用
+          const largestHotel = foundadjacentHotels.reduce((prev, current) =>
+            prev.tiles.length > current.tiles.length ? prev : current
+          );
           const mergedHotel = {
-            name: `Hotel ${hotels.length + 1}`,
+            key: largestHotel.key,
+            name: largestHotel.name,
             tiles: mergedTiles,
           };
 
@@ -77,7 +82,8 @@ export default function Grid() {
         else if (adjacentPlacedTiles.length >= 1) {  // ✅ 隣接タイルが1つでもあれば新しいホテルを作る
           // 2. 既存のホテルがない & 隣接タイルが1つ以上 → 新しいホテルを設立
           const newHotel = {
-            name: `Hotel ${hotels.length + 1}`,
+            key: Math.max(...updatedHotels.map(h => h.key), 0) + 1,
+            name: `Hotel ${Math.max(...updatedHotels.map(h => h.key), 0) + 1}`,
             tiles: [newTile, ...adjacentPlacedTiles],
           };
           updatedHotels.push(newHotel);
