@@ -11,7 +11,33 @@ export default function Grid() {
   const [placedTiles, setPlacedTiles] = useState<{ col: number; row: string }[]>([]);
 
   // ホテルのリスト
-  const [hotels, setHotels] = useState<{ key: number; name: string; tiles: { col: number; row: string }[] }[]>([]);
+  const [hotels, setHotels] = useState<{
+    key: number;
+    name: string;
+    tiles: { col: number; row: string }[];
+    home: { col: number; row: string };
+  }[]>([]);
+
+  const hotelImages: { [key: string]: string } = {
+    "空": "/images/sky.jpg",
+    "雲": "/images/cloud.jpg",
+    "晴": "/images/sun.jpg",
+    "霧": "/images/fog.jpg",
+    "雷": "/images/thunder.jpg",
+    "嵐": "/images/storm.jpg",
+    "雨": "/images/rain.jpg"
+  };
+
+  const hotelColors: { [key: string]: string } = {
+    "空": "bg-orange-400",
+    "雲": "bg-purple-400",
+    "晴": "bg-yellow-400",
+    "霧": "bg-indigo-400",
+    "雷": "bg-green-400",
+    "嵐": "bg-red-400",
+    "雨": "bg-blue-400"
+  };
+
 
   // ホテル選択モーダルの状態
   const [selectedTile, setSelectedTile] = useState<{ col: number; row: string; adjacentTiles: { col: number; row: string }[] } | null>(null);
@@ -79,6 +105,7 @@ export default function Grid() {
             key: largestHotel.key,
             name: largestHotel.name,
             tiles: mergedTiles,
+            home: mergedTiles[0],
           };
 
           // 合併で消去されたホテルの名前を再度利用可能にする
@@ -105,28 +132,6 @@ export default function Grid() {
     });
   };
 
-  // ホテル名に基づいてボタンの色を決定する関数
-  const getButtonColor = (hotelName: string) => {
-    switch (hotelName) {
-      case "空":
-        return "bg-orange-400";
-      case "雲":
-        return "bg-purple-400";
-      case "晴":
-        return "bg-yellow-400";
-      case "霧":
-        return "bg-indigo-400";
-      case "雷":
-        return "bg-green-400";
-      case "嵐":
-        return "bg-red-400";
-      case "雨":
-        return "bg-blue-400";
-      default:
-        return "bg-yellow-400"; // デフォルトの色
-    }
-  };
-
   // プレイヤーがホテルを選択したときの処理
   const handleHotelSelection = (index: number, hotelName: string) => {
     if (!selectedTile) return;
@@ -138,6 +143,7 @@ export default function Grid() {
         key: index,
         name: hotelName,
         tiles: newHotelTiles,
+        home: newHotelTiles[0],
       },
     ]);
     setBornNewHotel(false);
@@ -165,20 +171,27 @@ export default function Grid() {
             </div>
 
             {/* セル */}
+            {/* セル */}
             {colLabels.map((col) => {
               const isSelected = placedTiles.some((tile) => tile.col === col && tile.row === row);
-
+              const hotel = hotels.find(h => h.tiles.some(t => t.col === col && t.row === row));
+              const home = hotels.find(h => h.home.col === col && h.home.row === row);
               return (
                 <div
                   key={`cell-${col}${row}`}
-                  className={`w-10 h-10 flex items-center justify-center border border-gray-400 ${bornNewHotel ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'} ${isSelected ? "bg-blue-400 text-white" : "bg-white hover:bg-gray-200"
+                  className={`w-10 h-10 flex items-center justify-center border border-gray-400 ${bornNewHotel ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'} ${hotel ? hotelColors[hotel.name] : isSelected ? "bg-gray-300" : "bg-white hover:bg-gray-200"
                     }`}
                   onClick={() => !bornNewHotel && handleTileClick(col, row)}
                 >
-                  {col}{row}
+                  {hotel && home ? (
+                    <img src={hotelImages[hotel.name]} alt={hotel.name} className="w-8 h-8 object-contain" />
+                  ) : (
+                    `${col}${row}`
+                  )}
                 </div>
               );
             })}
+
           </React.Fragment>
         ))}
       </div>
@@ -214,7 +227,7 @@ export default function Grid() {
             {availableHotels.map((hotel, index) => (
               <button
                 key={index}
-                className={`px-4 py-2 rounded ${getButtonColor(hotel)}`}
+                className={`px-4 py-2 rounded ${hotelColors[hotel]}`}
                 onClick={() => handleHotelSelection(index, hotel)}
               >
                 {hotel}
