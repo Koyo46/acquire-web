@@ -7,6 +7,18 @@ export default function Grid() {
   const rowLabels = "ABCDEFGHI".split(""); // A～I のラベル
   const colLabels = Array.from({ length: cols }, (_, i) => i + 1); // 1～12 のラベル
 
+  //空き牌
+  const [emptyTiles, setEmptyTiles] = useState<{ col: number; row: string; }[]>(
+    Array.from({ length: 108 }, (_, i) => ({
+      col: Math.floor(i / 9) + 1,
+      row: "ABCDEFGHI"[i % 9]
+    }))
+  );
+  // プレイヤーのタイルのリスト 
+  const [playerTiles, setPlayerTiles] = useState<{ [playerId: string]: { col: number; row: string }[] }>({});
+  // 開発中は自由配置可能
+  const [freePlacementMode, setFreePlacementMode] = useState(false);
+
   // 配置されたタイルのリスト
   const [placedTiles, setPlacedTiles] = useState<{ col: number; row: string }[]>([]);
 
@@ -47,6 +59,57 @@ export default function Grid() {
     if (tileCount <= 20) return tier === "low" ? 500 : tier === "medium" ? 600 : 700;
     if (tileCount <= 30) return tier === "low" ? 600 : tier === "medium" ? 700 : 800;
     return tier === "low" ? 800 : tier === "medium" ? 1000 : 1200;
+  };
+
+  const generateRandomTile = (availableTiles: { col: number; row: string }[]) => {
+    if (availableTiles.length === 0) return null;
+    const randomIndex = Math.floor(Math.random() * availableTiles.length);
+    return availableTiles[randomIndex];
+  };
+
+  //手牌を補充
+  const replenishPlayerTiles = (playerId: number) => {
+    setPlayerTiles(prev => {
+      const currentTiles = prev[playerId] || [];
+      const tilesToAdd = Math.max(0, 6 - currentTiles.length); // 6個になるまで補充
+
+      // 空き牌リストを参照しながら、新しいタイルを一括取得
+      const availableTiles = [...emptyTiles]; // ここでコピーしておく
+      const newTiles: { col: number; row: string }[] = [];
+
+      for (let i = 0; i < tilesToAdd; i++) {
+        const newTile = generateRandomTile(availableTiles);
+        if (!newTile) break;
+        newTiles.push(newTile);
+        // 選ばれたタイルを availableTiles から削除
+        availableTiles.splice(availableTiles.findIndex(tile => tile.col === newTile.col && tile.row === newTile.row), 1);
+      }
+
+      // 空き牌リストを更新
+      setEmptyTiles(availableTiles);
+
+      return {
+        ...prev,
+        [playerId]: [...currentTiles, ...newTiles]
+      };
+    });
+  };
+
+
+  const handleTilePlacement = (playerId: number, col: number, row: string) => {
+    if (!freePlacementMode) {
+      // 手牌から選択されたタイルでない場合、設置不可
+      if (!playerTiles[playerId]?.some(tile => tile.col === col && tile.row === row)) {
+        return;
+      }
+    }
+
+    setPlacedTiles(prev => [...prev, { col, row }]);
+    setPlayerTiles(prev => ({
+      ...prev,
+      [playerId]: prev[playerId].filter(tile => !(tile.col === col && tile.row === row)) // 手牌から消す
+    }));
+    replenishPlayerTiles(playerId); // 手牌を補充
   };
 
   // ホテル選択モーダルの状態
@@ -163,6 +226,11 @@ export default function Grid() {
 
   return (
     <div className="flex flex-col items-center p-4 bg-gray-100 border border-gray-300 w-full max-w-screen-md">
+      {/* 手牌を配るボタン */}
+      <button className="px-4 py-2 bg-blue-300 rounded" onClick={() => replenishPlayerTiles(1)}>
+        手牌を配る
+      </button>
+      {/* グリッド */}
       <div className="grid grid-cols-[auto_repeat(12,minmax(2rem,1fr))] gap-1">
         {/* 上部のカラムラベル */}
         <div className="w-10 h-10"></div>
@@ -191,7 +259,8 @@ export default function Grid() {
                   key={`cell-${col}${row}`}
                   className={`w-10 h-10 flex items-center justify-center border border-gray-400 ${bornNewHotel ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'} ${hotel ? hotelColors[hotel.name] : isSelected ? "bg-gray-300" : "bg-white hover:bg-gray-200"
                     }`}
-                  onClick={() => !bornNewHotel && handleTileClick(col, row)}
+                  onClick={() => freePlacementMode && !bornNewHotel && handleTileClick(col, row)}
+
                 >
                   {hotel && home ? (
                     <img src={hotelImages[hotel.name]} alt={hotel.name} className="w-8 h-8 object-contain" />
@@ -248,6 +317,18 @@ export default function Grid() {
           </div>
         </div>
       )}
+      {/* 手牌 */}
+      <div className="mt-4 p-4 bg-white shadow rounded w-full max-w-screen-md">
+        <h3 className="text-lg font-bold">手牌</h3>
+        <div className="flex gap-2">
+          {playerTiles[1]?.map((tile, index) => (
+            <button key={index} className="px-4 py-2 bg-blue-300 rounded"
+              onClick={() => handleTilePlacement(1, tile.col, tile.row)}>
+              {tile.col}{tile.row}
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
