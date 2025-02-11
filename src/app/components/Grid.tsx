@@ -109,19 +109,19 @@ export default function Grid() {
   const getButtonColor = (hotelName: string) => {
     switch (hotelName) {
       case "空":
-        return "bg-red-400";
-      case "雲":
-        return "bg-blue-400";
-      case "晴":
-        return "bg-green-400";
-      case "霧":
-        return "bg-purple-400";
-      case "雷":
         return "bg-orange-400";
+      case "雲":
+        return "bg-purple-400";
+      case "晴":
+        return "bg-yellow-400";
+      case "霧":
+        return "bg-indigo-400";
+      case "雷":
+        return "bg-green-400";
       case "嵐":
-        return "bg-teal-400";
+        return "bg-red-400";
       case "雨":
-        return "bg-pink-400";
+        return "bg-blue-400";
       default:
         return "bg-yellow-400"; // デフォルトの色
     }
