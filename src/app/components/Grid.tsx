@@ -70,6 +70,7 @@ export default function Grid() {
             return { col, row };
           });
 
+
           // 最も大きいホテルの名前を使用
           const largestHotel = foundadjacentHotels.reduce((prev, current) =>
             prev.tiles.length > current.tiles.length ? prev : current
@@ -80,6 +81,12 @@ export default function Grid() {
             tiles: mergedTiles,
           };
 
+          // 合併で消去されたホテルの名前を再度利用可能にする
+          foundadjacentHotels.forEach(hotel => {
+            if (hotel.name !== largestHotel.name) {
+              setAvailableHotels(prev => Array.from(new Set([...prev, hotel.name])));
+            }
+          });
           // updatedHotelsからfoundadjacentHotelsに含まれるホテルを削除
           // これは、隣接する複数のホテルを合併する際に、合併対象のホテルを一時的に削除するため
           updatedHotels = updatedHotels.filter((hotel) => !foundadjacentHotels.includes(hotel));
@@ -96,6 +103,28 @@ export default function Grid() {
         return [...prev, newTile];
       }
     });
+  };
+
+  // ホテル名に基づいてボタンの色を決定する関数
+  const getButtonColor = (hotelName: string) => {
+    switch (hotelName) {
+      case "Luxor":
+        return "bg-red-400";
+      case "Tower":
+        return "bg-blue-400";
+      case "American":
+        return "bg-green-400";
+      case "Worldwide":
+        return "bg-purple-400";
+      case "Festival":
+        return "bg-orange-400";
+      case "Imperial":
+        return "bg-teal-400";
+      case "Continental":
+        return "bg-pink-400";
+      default:
+        return "bg-yellow-400"; // デフォルトの色
+    }
   };
 
   // プレイヤーがホテルを選択したときの処理
@@ -185,7 +214,7 @@ export default function Grid() {
             {availableHotels.map((hotel, index) => (
               <button
                 key={index}
-                className={`px-4 py-2 rounded bg-yellow-400`}
+                className={`px-4 py-2 rounded ${getButtonColor(hotel)}`}
                 onClick={() => handleHotelSelection(index, hotel)}
               >
                 {hotel}
