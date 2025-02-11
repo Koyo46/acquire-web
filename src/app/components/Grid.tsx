@@ -76,7 +76,6 @@ export default function Grid() {
       const adjacentPlacedTiles = adjacentTiles.filter((tile) =>
         prev.some((t) => t.col === tile.col && t.row === tile.row)
       );
-      console.log(adjacentPlacedTiles);
       let updatedHotels = [...hotels];
 
       // 既存のホテルを検索（新しく配置するタイル + 隣接タイルもチェック）
