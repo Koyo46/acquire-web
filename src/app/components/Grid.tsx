@@ -200,7 +200,9 @@ export default function Grid() {
       <div className="mt-4 p-4 bg-white shadow rounded w-full max-w-screen-md">
         <h3 className="text-lg font-bold">配置されたタイル</h3>
         <ul className="flex flex-wrap gap-2">
-          {placedTiles.map((tile) => (
+          {[...placedTiles]
+            .sort((a, b) => a.col - b.col || a.row.localeCompare(b.row))
+            .map((tile) => (
             <li key={`placed-${tile.col}${tile.row}`} className="px-2 py-1 bg-blue-200 rounded">
               {tile.col}{tile.row}
             </li>
