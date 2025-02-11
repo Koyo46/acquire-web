@@ -13,6 +13,10 @@ export default function Grid() {
   // ホテルのリスト
   const [hotels, setHotels] = useState<{ key: number; name: string; tiles: { col: number; row: string }[] }[]>([]);
 
+  // ホテル選択モーダルの状態
+  const [selectedTile, setSelectedTile] = useState<{ col: number; row: string; adjacentTiles: { col: number; row: string }[] } | null>(null);
+  const [availableHotels, setAvailableHotels] = useState(["Luxor", "Tower", "American", "Worldwide", "Festival", "Imperial", "Continental"]);
+  const [bornNewHotel, setBornNewHotel] = useState(false); // 新しいホテルが誕生したかどうかを保持
   // 隣接するタイルを取得
   const getAdjacentTiles = (col: number, row: string) => {
     const rowIndex = rowLabels.indexOf(row);
@@ -39,7 +43,7 @@ export default function Grid() {
         const adjacentPlacedTiles = adjacentTiles.filter((tile) =>
           prev.some((t) => t.col === tile.col && t.row === tile.row)
         );
-
+        console.log(adjacentPlacedTiles);
         let updatedHotels = [...hotels];
 
         // 既存のホテルを検索（新しく配置するタイル + 隣接タイルもチェック）
@@ -76,23 +80,40 @@ export default function Grid() {
             tiles: mergedTiles,
           };
 
+          // updatedHotelsからfoundadjacentHotelsに含まれるホテルを削除
+          // これは、隣接する複数のホテルを合併する際に、合併対象のホテルを一時的に削除するため
           updatedHotels = updatedHotels.filter((hotel) => !foundadjacentHotels.includes(hotel));
           updatedHotels.push(mergedHotel);
         }
         else if (adjacentPlacedTiles.length >= 1) {  // ✅ 隣接タイルが1つでもあれば新しいホテルを作る
           // 2. 既存のホテルがない & 隣接タイルが1つ以上 → 新しいホテルを設立
-          const newHotel = {
-            key: Math.max(...updatedHotels.map(h => h.key), 0) + 1,
-            name: `Hotel ${Math.max(...updatedHotels.map(h => h.key), 0) + 1}`,
-            tiles: [newTile, ...adjacentPlacedTiles],
-          };
-          updatedHotels.push(newHotel);
+          setBornNewHotel(true);
+          setSelectedTile({ col: col, row: row, adjacentTiles: adjacentPlacedTiles });
+          console.log(selectedTile);
         }
 
         setHotels(updatedHotels);
         return [...prev, newTile];
       }
     });
+  };
+
+  // プレイヤーがホテルを選択したときの処理
+  const handleHotelSelection = (index: number, hotelName: string) => {
+    if (!selectedTile) return;
+    const newHotelTiles = [selectedTile, ...selectedTile.adjacentTiles];
+
+    setHotels((prevHotels) => [
+      ...prevHotels,
+      {
+        key: index,
+        name: hotelName,
+        tiles: newHotelTiles,
+      },
+    ]);
+    setBornNewHotel(false);
+    setSelectedTile(null);
+    setAvailableHotels(availableHotels.filter((hotel) => hotel !== hotelName));
   };
 
   return (
@@ -121,9 +142,9 @@ export default function Grid() {
               return (
                 <div
                   key={`cell-${col}${row}`}
-                  className={`w-10 h-10 flex items-center justify-center border border-gray-400 cursor-pointer ${isSelected ? "bg-blue-400 text-white" : "bg-white hover:bg-gray-200"
+                  className={`w-10 h-10 flex items-center justify-center border border-gray-400 ${bornNewHotel ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'} ${isSelected ? "bg-blue-400 text-white" : "bg-white hover:bg-gray-200"
                     }`}
-                  onClick={() => handleTileClick(col, row)}
+                  onClick={() => !bornNewHotel && handleTileClick(col, row)}
                 >
                   {col}{row}
                 </div>
@@ -156,6 +177,23 @@ export default function Grid() {
           ))}
         </ul>
       </div>
+      {/* ホテル選択モーダル */}
+      {bornNewHotel && (
+        <div className="mt-4 p-4 bg-white shadow rounded w-full max-w-screen-md">
+          <h3 className="text-lg font-bold">ホテルを選択</h3>
+          <div className="grid grid-cols-3 gap-2 mt-2">
+            {availableHotels.map((hotel, index) => (
+              <button
+                key={index}
+                className={`px-4 py-2 rounded bg-yellow-400`}
+                onClick={() => handleHotelSelection(index, hotel)}
+              >
+                {hotel}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
