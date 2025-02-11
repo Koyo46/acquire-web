@@ -15,7 +15,7 @@ export default function Grid() {
 
   // ホテル選択モーダルの状態
   const [selectedTile, setSelectedTile] = useState<{ col: number; row: string; adjacentTiles: { col: number; row: string }[] } | null>(null);
-  const [availableHotels, setAvailableHotels] = useState(["Luxor", "Tower", "American", "Worldwide", "Festival", "Imperial", "Continental"]);
+  const [availableHotels, setAvailableHotels] = useState(["空", "雲", "晴", "霧", "雷", "嵐", "雨"]);
   const [bornNewHotel, setBornNewHotel] = useState(false); // 新しいホテルが誕生したかどうかを保持
   // 隣接するタイルを取得
   const getAdjacentTiles = (col: number, row: string) => {
@@ -108,19 +108,19 @@ export default function Grid() {
   // ホテル名に基づいてボタンの色を決定する関数
   const getButtonColor = (hotelName: string) => {
     switch (hotelName) {
-      case "Luxor":
+      case "空":
         return "bg-red-400";
-      case "Tower":
+      case "雲":
         return "bg-blue-400";
-      case "American":
+      case "晴":
         return "bg-green-400";
-      case "Worldwide":
+      case "霧":
         return "bg-purple-400";
-      case "Festival":
+      case "雷":
         return "bg-orange-400";
-      case "Imperial":
+      case "嵐":
         return "bg-teal-400";
-      case "Continental":
+      case "雨":
         return "bg-pink-400";
       default:
         return "bg-yellow-400"; // デフォルトの色
