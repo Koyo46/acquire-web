@@ -1,4 +1,4 @@
-import Grid from "@/app/components/Grid";
+import Grid from "@/src/app/components/Grid";
 
 export default function Home() {
   return (
