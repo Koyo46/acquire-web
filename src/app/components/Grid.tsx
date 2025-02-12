@@ -4,8 +4,8 @@ import { supabase } from "@/lib/supabaseClient";
 import { tileIdToPosition, positionToTileId } from "@/src/utils/tileUtils";
 
 export default function Grid() {
-  const [gameId, setGameId] = useState<string | null>(null);
-  const [playerId, setPlayerId] = useState<string | null>(null);
+  const [gameId, setGameId] = useState<string>("");
+  const [playerId, setPlayerId] = useState<string>("");
 
   useEffect(() => {
     const fetchIds = async () => {
@@ -33,6 +33,8 @@ export default function Grid() {
   const rowLabels = "ABCDEFGHI".split(""); // A～I のラベル
   const colLabels = Array.from({ length: cols }, (_, i) => i + 1); // 1～12 のラベル
   const [playerHand, setPlayerHand] = useState<{ col: number; row: string }[]>([]);
+  const [pendingTile, setPendingTile] = useState<{ col: number; row: string } | null>(null);
+  const [confirming, setConfirming] = useState(false);
 
   const fetchPlayerHand = async (gameId: string, playerId: string) => {
     const { data, error } = await supabase
@@ -163,9 +165,18 @@ export default function Grid() {
   };
 
   const handleTilePlacement = async (col: number, row: string) => {
-    const tileId = positionToTileId(col, row);
+    if (confirming) return; // 確定待ちのときは配置できない
 
-    // タイルを盤面に配置
+    setPendingTile({ col, row }); // 配置予定のタイルを保存
+    setConfirming(true); // 確定ボタンを表示
+  };
+
+  const confirmTilePlacement = async () => {
+    if (!pendingTile) return;
+
+    const tileId = positionToTileId(pendingTile.col, pendingTile.row);
+
+    // タイルを盤面に確定
     const { error } = await supabase
       .from("tiles")
       .update({ placed: true })
@@ -178,11 +189,21 @@ export default function Grid() {
     }
 
     // 手牌を更新（配置したタイルを削除）
-    await removeTileFromHand(gameId, playerId, col, row); // 手牌から削除
-    await placeTileOnBoard(gameId, col, row);
+    await removeTileFromHand(gameId, playerId, pendingTile.col, pendingTile.row);
+    await placeTileOnBoard(gameId, pendingTile.col, pendingTile.row);
+
     // 手牌を補充
-    await drawTilesUntilFull(playerId);
+
+    // 状態をリセット
+    setPendingTile(null);
+    setConfirming(false);
   };
+
+  const cancelTilePlacement = () => {
+    setPendingTile(null);
+    setConfirming(false);
+  };
+
 
 
   // ホテル選択モーダルの状態
@@ -330,10 +351,15 @@ export default function Grid() {
               return (
                 <div
                   key={`cell-${col}${row}`}
-                  className={`w-10 h-10 flex items-center justify-center border border-gray-400 ${bornNewHotel ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'} ${hotel ? hotelColors[hotel.name] : isSelected ? "bg-gray-300" : "bg-white hover:bg-gray-200"
+                  className={`w-10 h-10 flex items-center justify-center border border-gray-400 ${bornNewHotel ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
+                    } ${hotel
+                      ? hotelColors[hotel.name]
+                      : isSelected
+                        ? "bg-gray-400"
+                        : pendingTile?.col === col && pendingTile?.row === row
+                          ? "bg-gray-300 border-2 border-gray-500"
+                          : "bg-white hover:bg-gray-200"
                     }`}
-                  onClick={() => freePlacementMode && !bornNewHotel && handleTileClick(col, row)}
-
                 >
                   {hotel && home ? (
                     <img src={hotelImages[hotel.name]} alt={hotel.name} className="w-8 h-8 object-contain" />
@@ -347,7 +373,20 @@ export default function Grid() {
           </React.Fragment>
         ))}
       </div>
-
+      {/* 確定 & キャンセルボタン */}
+      {confirming && pendingTile && (
+        <div className="mt-4 p-4 bg-white shadow rounded w-full max-w-screen-md">
+          <h3 className="text-lg font-bold">配置を確定しますか？</h3>
+          <div className="flex gap-2">
+            <button className="px-4 py-2 bg-green-400 text-white rounded" onClick={confirmTilePlacement}>
+              確定する
+            </button>
+            <button className="px-4 py-2 bg-red-400 text-white rounded" onClick={cancelTilePlacement}>
+              キャンセル
+            </button>
+          </div>
+        </div>
+      )}
       {/* 配置されたタイルのリスト */}
       <div className="mt-4 p-4 bg-white shadow rounded w-full max-w-screen-md">
         <h3 className="text-lg font-bold">配置されたタイル</h3>
