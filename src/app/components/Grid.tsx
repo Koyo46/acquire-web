@@ -237,6 +237,9 @@ export default function Grid() {
         tile_id: tile.id
       })));
 
+    // 手牌を更新
+    setPlayerHand(prev => [...prev, ...newTiles.map(tile => tileIdToPosition(tile.id))]);
+
     if (insertError) {
       console.error("手牌追加エラー:", insertError);
     }
@@ -421,15 +424,15 @@ export default function Grid() {
             </div>
 
             {/* セル */}
-            {/* セル */}
             {colLabels.map((col) => {
               const isSelected = placedTiles.some((tile) => tile.col === col && tile.row === row);
               const hotel = establishedHotels.find(h => h.tiles.some(t => t.col === col && t.row === row));
               const home = establishedHotels.find(h => h.home.col === col && h.home.row === row);
+              const isInPlayerHand = playerHand.some((tile) => tile.col === col && tile.row === row);
               return (
                 <div
                   key={`cell-${col}${row}`}
-                  className={`w-10 h-10 flex items-center justify-center border border-gray-400 ${bornNewHotel ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
+                  className={`w-10 h-10 flex items-center justify-center border ${isInPlayerHand ? 'border-red-500 border-2' : 'border-gray-400'} ${bornNewHotel ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
                     } ${hotel
                       ? hotelColors[hotel.name]
                       : isSelected
@@ -438,6 +441,7 @@ export default function Grid() {
                           ? "bg-gray-300 border-2 border-gray-500"
                           : "bg-white hover:bg-gray-200"
                     }`}
+                  onClick={() => isInPlayerHand ? handleTilePlacement(col, row) : null}
                 >
                   {hotel && home ? (
                     <img src={hotelImages[hotel.name]} alt={hotel.name} className="w-8 h-8 object-contain" />
