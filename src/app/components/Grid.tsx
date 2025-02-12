@@ -439,7 +439,7 @@ export default function Grid() {
       </div>
       {/* 確定 & キャンセルボタン */}
       {confirming && pendingTile && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center pt-80">
           <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
             <h3 className="text-lg font-bold mb-4">配置を確定しますか？</h3>
             <div className="flex gap-4 justify-end">
@@ -476,14 +476,17 @@ export default function Grid() {
       {/* ホテルのリスト */}
       <div className="mt-4 p-4 bg-white shadow rounded w-full max-w-screen-md">
         <h3 className="text-lg font-bold">ホテル一覧</h3>
-        <ul>
+        <div className="grid grid-cols-3 gap-2">
           {hotels.map((hotel, index) => (
-            <li key={`hotel-${index}`} className="mt-2 p-2 bg-yellow-200 rounded">
-              {hotel.name}: {hotel.tiles.map(tile => `${tile.col}${tile.row}`).join(", ")}
-            </li>
+            <div key={`hotel-${index}`} className="p-2 bg-yellow-200 rounded flex justify-between">
+              <span>{hotel.name}</span>
+              <span className="font-bold text-blue-600">{hotel.tiles.length} マス</span>
+            </div>
           ))}
-        </ul>
+        </div>
       </div>
+
+
       {/* ホテル選択モーダル */}
       {bornNewHotel && (
         <div className="mt-4 p-4 bg-white shadow rounded w-full max-w-screen-md">
