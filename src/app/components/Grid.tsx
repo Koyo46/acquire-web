@@ -53,6 +53,16 @@ export default function Grid() {
 
   // 手牌を取得
   useEffect(() => {
+    if (!gameId || !playerId) return;
+
+    // 初回ロード時に手牌を取得
+    const fetchHand = async () => {
+      const hand = await fetchPlayerHand(gameId, playerId);
+      setPlayerHand(hand);
+    };
+
+    fetchHand();
+
     const channel = supabase.channel("hands").on("postgres_changes", {
       event: "*",
       schema: "public",
