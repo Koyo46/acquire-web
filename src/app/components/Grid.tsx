@@ -205,7 +205,6 @@ export default function Grid() {
           </React.Fragment>
         ))}
       </div>
-
       {/* 配置されたタイルのリスト */}
       <div className="mt-4 p-4 bg-white shadow rounded w-full max-w-screen-md">
         <h3 className="text-lg font-bold">配置されたタイル</h3>
@@ -223,14 +222,17 @@ export default function Grid() {
       {/* ホテルのリスト */}
       <div className="mt-4 p-4 bg-white shadow rounded w-full max-w-screen-md">
         <h3 className="text-lg font-bold">ホテル一覧</h3>
-        <ul>
+        <div className="grid grid-cols-3 gap-2">
           {hotels.map((hotel, index) => (
-            <li key={`hotel-${index}`} className="mt-2 p-2 bg-yellow-200 rounded">
-              {hotel.name}: {hotel.tiles.map(tile => `${tile.col}${tile.row}`).join(", ")}
-            </li>
+            <div key={`hotel-${index}`} className="p-2 bg-yellow-200 rounded flex justify-between">
+              <span>{hotel.name}</span>
+              <span className="font-bold text-blue-600">{hotel.tiles.length} マス</span>
+            </div>
           ))}
-        </ul>
+        </div>
       </div>
+
+
       {/* ホテル選択モーダル */}
       {bornNewHotel && (
         <div className="mt-4 p-4 bg-white shadow rounded w-full max-w-screen-md">
