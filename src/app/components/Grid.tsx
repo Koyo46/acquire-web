@@ -96,11 +96,11 @@ export default function Grid() {
 
   const hotelImages: { [key: string]: string } = {
     "空": "/images/sky.jpg",
-    "雲": "/images/cloud.jpg",
-    "晴": "/images/sun.jpg",
-    "霧": "/images/fog.jpg",
-    "雷": "/images/thunder.jpg",
-    "嵐": "/images/storm.jpg",
+    "雲": "/images/cloud.png",
+    "晴": "/images/sun.png",
+    "霧": "/images/fog.png",
+    "雷": "/images/thunder.png",
+    "嵐": "/images/storm.png",
     "雨": "/images/rain.jpg"
   };
 
