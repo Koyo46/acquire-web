@@ -1,5 +1,7 @@
 "use client";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabaseClient";
+import { tileIdToPosition, positionToTileId } from "@/src/utils/tileUtils";
 
 export default function Grid() {
   const [gameId, setGameId] = useState<string | null>(null);
@@ -30,18 +32,42 @@ export default function Grid() {
   const cols = 12; // 1～12
   const rowLabels = "ABCDEFGHI".split(""); // A～I のラベル
   const colLabels = Array.from({ length: cols }, (_, i) => i + 1); // 1～12 のラベル
+  const [playerHand, setPlayerHand] = useState<{ col: number; row: string }[]>([]);
 
-  //空き牌
-  const [emptyTiles, setEmptyTiles] = useState<{ col: number; row: string; }[]>(
-    Array.from({ length: 108 }, (_, i) => ({
-      col: Math.floor(i / 9) + 1,
-      row: "ABCDEFGHI"[i % 9]
-    }))
-  );
-  // プレイヤーのタイルのリスト 
-  const [playerTiles, setPlayerTiles] = useState<{ [playerId: string]: { col: number; row: string }[] }>({});
+  const fetchPlayerHand = async (gameId: string, playerId: string) => {
+    const { data, error } = await supabase
+      .from("hands")
+      .select("tile_id")
+      .eq("game_id", gameId)
+      .eq("player_id", playerId);
+
+    if (error) {
+      console.error("手牌取得エラー:", error);
+      return [];
+    }
+
+    return data.map(({ tile_id }) => tileIdToPosition(tile_id));
+  };
+
+  // 手牌を取得
+  useEffect(() => {
+    const channel = supabase.channel("hands").on("postgres_changes", {
+      event: "*",
+      schema: "public",
+      table: "hands"
+    }, async (payload) => {
+      if (gameId && playerId) { // gameId と playerId が null でないことを確認
+        const hand = await fetchPlayerHand(gameId, playerId);
+        setPlayerHand(hand);
+      }
+    }).subscribe();
+    return () => {
+      supabase.channel("hands").unsubscribe();
+    };
+  }, [gameId, playerId]);
+
   // 開発中は自由配置可能
-  const [freePlacementMode, setFreePlacementMode] = useState(false);
+  const [freePlacementMode, setFreePlacementMode] = useState(true);
 
   // 配置されたタイルのリスト
   const [placedTiles, setPlacedTiles] = useState<{ col: number; row: string }[]>([]);
@@ -85,56 +111,79 @@ export default function Grid() {
     return tier === "low" ? 800 : tier === "medium" ? 1000 : 1200;
   };
 
-  const generateRandomTile = (availableTiles: { col: number; row: string }[]) => {
-    if (availableTiles.length === 0) return null;
-    const randomIndex = Math.floor(Math.random() * availableTiles.length);
-    return availableTiles[randomIndex];
-  };
+  const dealTiles = async (playerId: string) => {
+    // 空いているタイルを取得
+    const { data: availableTiles, error } = await supabase
+      .from("tiles")
+      .select("id")
+      .eq("game_id", gameId)
+      .eq("placed", false);
 
-  //手牌を補充
-  const replenishPlayerTiles = (playerId: number) => {
-    setPlayerTiles(prev => {
-      const currentTiles = prev[playerId] || [];
-      const tilesToAdd = Math.max(0, 6 - currentTiles.length); // 6個になるまで補充
-
-      // 空き牌リストを参照しながら、新しいタイルを一括取得
-      const availableTiles = [...emptyTiles]; // ここでコピーしておく
-      const newTiles: { col: number; row: string }[] = [];
-
-      for (let i = 0; i < tilesToAdd; i++) {
-        const newTile = generateRandomTile(availableTiles);
-        if (!newTile) break;
-        newTiles.push(newTile);
-        // 選ばれたタイルを availableTiles から削除
-        availableTiles.splice(availableTiles.findIndex(tile => tile.col === newTile.col && tile.row === newTile.row), 1);
-      }
-
-      // 空き牌リストを更新
-      setEmptyTiles(availableTiles);
-
-      return {
-        ...prev,
-        [playerId]: [...currentTiles, ...newTiles]
-      };
-    });
-  };
-
-
-  const handleTilePlacement = (playerId: number, col: number, row: string) => {
-    if (!freePlacementMode) {
-      // 手牌から選択されたタイルでない場合、設置不可
-      if (!playerTiles[playerId]?.some(tile => tile.col === col && tile.row === row)) {
-        return;
-      }
+    if (error) {
+      console.error("タイル取得エラー:", error);
+      return;
     }
 
-    setPlacedTiles(prev => [...prev, { col, row }]);
-    setPlayerTiles(prev => ({
-      ...prev,
-      [playerId]: prev[playerId].filter(tile => !(tile.col === col && tile.row === row)) // 手牌から消す
-    }));
-    replenishPlayerTiles(playerId); // 手牌を補充
+    for (let i = 0; i < 6; i++) {
+      // ランダムに1枚補充を試みる
+      let newTile;
+      do {
+        newTile = availableTiles.sort(() => Math.random() - 0.5)[0];
+      } while (!newTile);
+
+
+      // 手牌に追加
+      const { error: insertError } = await supabase
+        .from("hands")
+        .insert({ game_id: gameId, player_id: playerId, tile_id: newTile.id });
+
+      if (insertError) {
+        console.error("手牌追加エラー:", insertError);
+      }
+    }
   };
+
+  const removeTileFromHand = async (gameId: string, playerId: string, col: number, row: string) => {
+    const tileId = positionToTileId(col, row); // タイルの ID に変換
+
+    // 1️⃣ フロントエンドの状態を更新（手牌から削除）
+    setPlayerHand(prev => prev.filter(tile => !(tile.col === col && tile.row === row)));
+
+    // 2️⃣ Supabase の `hands` テーブルから該当のタイルを削除
+    const { error } = await supabase
+      .from("hands")
+      .delete()
+      .eq("game_id", gameId)
+      .eq("player_id", playerId)
+      .eq("tile_id", tileId);
+
+    if (error) {
+      console.error("手牌削除エラー:", error);
+    }
+  };
+
+  const handleTilePlacement = async (col: number, row: string) => {
+    const tileId = positionToTileId(col, row);
+
+    // タイルを盤面に配置
+    const { error } = await supabase
+      .from("tiles")
+      .update({ placed: true })
+      .eq("game_id", gameId)
+      .eq("id", tileId);
+
+    if (error) {
+      console.error("タイル配置エラー:", error);
+      return;
+    }
+
+    // 手牌を更新（配置したタイルを削除）
+    await removeTileFromHand(gameId, playerId, col, row); // 手牌から削除
+    await placeTileOnBoard(gameId, col, row);
+    // 手牌を補充
+    await drawTilesUntilFull(playerId);
+  };
+
 
   // ホテル選択モーダルの状態
   const [selectedTile, setSelectedTile] = useState<{ col: number; row: string; adjacentTiles: { col: number; row: string }[] } | null>(null);
@@ -153,7 +202,7 @@ export default function Grid() {
   };
 
   // タイルをクリックしたときの処理
-  const handleTileClick = (col: number, row: string) => {
+  const placeTileOnBoard = async (gameId: string, col: number, row: string) => {
     setPlacedTiles((prev) => {
       const exists = prev.some((tile) => tile.col === col && tile.row === row);
       if (exists) return prev;
@@ -251,7 +300,7 @@ export default function Grid() {
   return (
     <div className="flex flex-col items-center p-4 bg-gray-100 border border-gray-300 w-full max-w-screen-md">
       {/* 手牌を配るボタン */}
-      <button className="px-4 py-2 bg-blue-300 rounded" onClick={() => replenishPlayerTiles(1)}>
+      <button className="px-4 py-2 bg-blue-300 rounded" onClick={() => dealTiles(playerId)}>
         手牌を配る
       </button>
       {/* グリッド */}
@@ -345,9 +394,9 @@ export default function Grid() {
       <div className="mt-4 p-4 bg-white shadow rounded w-full max-w-screen-md">
         <h3 className="text-lg font-bold">手牌</h3>
         <div className="flex gap-2">
-          {playerTiles[1]?.map((tile, index) => (
+          {playerHand.map((tile, index) => (
             <button key={index} className="px-4 py-2 bg-blue-300 rounded"
-              onClick={() => handleTilePlacement(1, tile.col, tile.row)}>
+              onClick={() => handleTilePlacement(tile.col, tile.row)}>
               {tile.col}{tile.row}
             </button>
           ))}
