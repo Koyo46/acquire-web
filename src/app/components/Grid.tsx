@@ -174,6 +174,60 @@ export default function Grid() {
     }
   };
 
+  const drawTilesUntil6 = async (playerId: string) => {
+    if (!gameId || !playerId) return;
+
+    // 現在の手牌を取得
+    const { data: currentHand, error: handError } = await supabase
+      .from("hands")
+      .select("tile_id")
+      .eq("game_id", gameId)
+      .eq("player_id", playerId);
+
+    if (handError) {
+      console.error("手牌取得エラー:", handError);
+      return;
+    }
+
+    const currentCount = currentHand.length;
+    const tilesToDraw = 6 - currentCount; // 6枚未満なら補充枚数を決定
+
+    if (tilesToDraw <= 0) return; // すでに6枚持っていたら何もしない
+
+    // 空いているタイルを取得
+    const { data: availableTiles, error: tileError } = await supabase
+      .from("tiles")
+      .select("id")
+      .eq("game_id", gameId)
+      .eq("placed", false);
+
+    if (tileError) {
+      console.error("タイル取得エラー:", tileError);
+      return;
+    }
+
+    if (!availableTiles || availableTiles.length === 0) {
+      console.warn("補充可能なタイルがありません");
+      return;
+    }
+
+    // ランダムに tilesToDraw 枚補充
+    const newTiles = availableTiles.sort(() => Math.random() - 0.5).slice(0, tilesToDraw);
+
+    // Supabase に追加
+    const { error: insertError } = await supabase
+      .from("hands")
+      .insert(newTiles.map(tile => ({
+        game_id: gameId,
+        player_id: playerId,
+        tile_id: tile.id
+      })));
+
+    if (insertError) {
+      console.error("手牌追加エラー:", insertError);
+    }
+  };
+
   const handleTilePlacement = async (col: number, row: string) => {
     if (confirming) return; // 確定待ちのときは配置できない
 
@@ -385,15 +439,23 @@ export default function Grid() {
       </div>
       {/* 確定 & キャンセルボタン */}
       {confirming && pendingTile && (
-        <div className="mt-4 p-4 bg-white shadow rounded w-full max-w-screen-md">
-          <h3 className="text-lg font-bold">配置を確定しますか？</h3>
-          <div className="flex gap-2">
-            <button className="px-4 py-2 bg-green-400 text-white rounded" onClick={confirmTilePlacement}>
-              確定する
-            </button>
-            <button className="px-4 py-2 bg-red-400 text-white rounded" onClick={cancelTilePlacement}>
-              キャンセル
-            </button>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+          <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
+            <h3 className="text-lg font-bold mb-4">配置を確定しますか？</h3>
+            <div className="flex gap-4 justify-end">
+              <button
+                className="px-6 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors"
+                onClick={confirmTilePlacement}
+              >
+                確定する
+              </button>
+              <button
+                className="px-6 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
+                onClick={cancelTilePlacement}
+              >
+                キャンセル
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -442,15 +504,29 @@ export default function Grid() {
       {/* 手牌 */}
       <div className="mt-4 p-4 bg-white shadow rounded w-full max-w-screen-md">
         <h3 className="text-lg font-bold">手牌</h3>
-        <div className="flex gap-2">
-          {playerHand.map((tile, index) => (
-            <button key={index} className="px-4 py-2 bg-blue-300 rounded"
-              onClick={() => handleTilePlacement(tile.col, tile.row)}>
-              {tile.col}{tile.row}
-            </button>
-          ))}
+        <div className="flex justify-between items-center">
+          {/* 手牌一覧 */}
+          <div className="flex gap-2">
+            {playerHand.map((tile, index) => (
+              <button key={index} className="w-16 h-16 bg-gray-400 "
+                onClick={() => handleTilePlacement(tile.col, tile.row)}>
+                {tile.col}{tile.row}
+              </button>
+            ))}
+          </div>
+
+          {/* 補充ボタン（手牌が6枚未満のときのみ表示） */}
+
+          <button
+            className="ml-4 px-4 py-2 text-white rounded shadow-md border-2 border-black"
+            onClick={() => drawTilesUntil6(playerId)}
+            disabled={playerHand.length >= 6}
+          >
+            <img src="/images/draw.webp" alt="draw" className="w-16 h-16" />
+          </button>
         </div>
       </div>
+
     </div>
   );
 }
