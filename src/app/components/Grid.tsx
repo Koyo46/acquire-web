@@ -11,7 +11,7 @@ export default function Grid() {
   const [placedTiles, setPlacedTiles] = useState<{ col: number; row: string }[]>([]);
 
   // ホテルのリスト
-  const [hotels, setHotels] = useState<{
+  const [establishedHotels, setEstablishedHotels] = useState<{
     key: number;
     name: string;
     tiles: { col: number; row: string }[];
@@ -19,6 +19,20 @@ export default function Grid() {
     // stockValue: number; // J-Stock の価格
     // tier: "low" | "medium" | "high";
   }[]>([]);
+
+  const allHotels = ["空", "雲", "晴", "霧", "雷", "嵐", "雨"]; // すべてのホテル名
+
+  const getCompleteHotelList = () => {
+    const existingHotels = establishedHotels.reduce((acc, hotel) => {
+      acc[hotel.name] = hotel.tiles.length;
+      return acc;
+    }, {} as { [key: string]: number });
+
+    return allHotels.map(name => ({
+      name,
+      tiles: existingHotels[name] || 0, // すでにある場合はタイル数、ない場合は0
+    }));
+  };
 
   const hotelImages: { [key: string]: string } = {
     "空": "/images/sky.jpg",
@@ -76,7 +90,7 @@ export default function Grid() {
       const adjacentPlacedTiles = adjacentTiles.filter((tile) =>
         prev.some((t) => t.col === tile.col && t.row === tile.row)
       );
-      let updatedHotels = [...hotels];
+      let updatedHotels = [...establishedHotels];
 
       // 既存のホテルを検索（新しく配置するタイル + 隣接タイルもチェック）
       const foundadjacentHotels = updatedHotels.filter((hotel) =>
@@ -137,7 +151,7 @@ export default function Grid() {
         setSelectedTile({ col: col, row: row, adjacentTiles: adjacentPlacedTiles });
       }
 
-      setHotels(updatedHotels);
+      setEstablishedHotels(updatedHotels);
       return [...prev, newTile];
     });
   };
@@ -147,7 +161,7 @@ export default function Grid() {
     if (!selectedTile) return;
     const newHotelTiles = [selectedTile, ...selectedTile.adjacentTiles];
 
-    setHotels((prevHotels) => [
+    setEstablishedHotels((prevHotels) => [
       ...prevHotels,
       {
         key: index,
@@ -184,8 +198,8 @@ export default function Grid() {
             {/* セル */}
             {colLabels.map((col) => {
               const isSelected = placedTiles.some((tile) => tile.col === col && tile.row === row);
-              const hotel = hotels.find(h => h.tiles.some(t => t.col === col && t.row === row));
-              const home = hotels.find(h => h.home.col === col && h.home.row === row);
+              const hotel = establishedHotels.find(h => h.tiles.some(t => t.col === col && t.row === row));
+              const home = establishedHotels.find(h => h.home.col === col && h.home.row === row);
               return (
                 <div
                   key={`cell-${col}${row}`}
@@ -222,15 +236,17 @@ export default function Grid() {
       {/* ホテルのリスト */}
       <div className="mt-4 p-4 bg-white shadow rounded w-full max-w-screen-md">
         <h3 className="text-lg font-bold">ホテル一覧</h3>
-        <div className="grid grid-cols-3 gap-2">
-          {hotels.map((hotel, index) => (
-            <div key={`hotel-${index}`} className="p-2 bg-yellow-200 rounded flex justify-between">
+        <div className="grid grid-cols-3 gap-2 md:grid-cols-2 sm:grid-cols-1">
+          {getCompleteHotelList().map((hotel, index) => (
+            <div key={`hotel-${index}`} className={`p-2 ${hotelColors[hotel.name]} rounded flex items-center`}>
+              <img src={hotelImages[hotel.name]} alt={hotel.name} className="w-8 h-8 object-contain mr-2" />
               <span>{hotel.name}</span>
-              <span className="font-bold text-blue-600">{hotel.tiles.length} マス</span>
+              <span className="font-bold text-white ml-auto">{hotel.tiles} マス</span>
             </div>
           ))}
         </div>
       </div>
+
 
 
       {/* ホテル選択モーダル */}
