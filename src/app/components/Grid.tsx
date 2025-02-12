@@ -2,6 +2,30 @@
 import React, { useState } from "react";
 
 export default function Grid() {
+  const [gameId, setGameId] = useState<string | null>(null);
+  const [playerId, setPlayerId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchIds = async () => {
+      const { data: gameData } = await supabase
+        .from("game_tables")
+        .select("id")
+        .eq("status", "ongoing")
+        .single();
+
+      const { data: playerData } = await supabase
+        .from("users")
+        .select("id")
+        .eq("username", "test")
+        .single();
+
+      setGameId(gameData?.id);
+      setPlayerId(playerData?.id);
+    };
+
+    fetchIds();
+  }, []);
+
   const rows = 9; // A～I
   const cols = 12; // 1～12
   const rowLabels = "ABCDEFGHI".split(""); // A～I のラベル
