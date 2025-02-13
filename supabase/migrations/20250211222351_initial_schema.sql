@@ -16,12 +16,14 @@ CREATE TABLE game_tables (
   created_at TIMESTAMP DEFAULT NOW(),
   status TEXT CHECK (status IN ('waiting', 'ongoing', 'completed')) DEFAULT 'waiting',
   current_turn UUID REFERENCES users(id), -- 現在のターンのプレイヤー
+  turn_order UUID[] NOT NULL DEFAULT '{}',-- ゲーム内のプレイヤーの順番
   winner UUID REFERENCES users(id) -- 勝者（ゲーム終了時）
 );
 
 -- 3️⃣ `tiles` テーブル（盤面のタイル管理）
 CREATE TABLE tiles (
-  tile_id INT,
+  id SERIAL PRIMARY KEY,
+  tile_kind INT,
   game_id UUID REFERENCES game_tables(id) ON DELETE CASCADE,
   owner_id UUID REFERENCES users(id), -- そのタイルを持つプレイヤー
   placed BOOLEAN DEFAULT FALSE -- 配置済みかどうか
@@ -32,5 +34,5 @@ CREATE TABLE hands (
   id SERIAL PRIMARY KEY,
   game_id UUID REFERENCES game_tables(id) ON DELETE CASCADE,
   player_id UUID REFERENCES users(id) ON DELETE CASCADE,
-  tile_id INT REFERENCES tiles(tile_id) ON DELETE CASCADE -- タイルの ID
+  tile_id INT REFERENCES tiles(id) ON DELETE CASCADE -- タイルの ID
 );

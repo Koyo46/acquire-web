@@ -5,6 +5,13 @@ VALUES (
   'test',
   'test@example.com',
   'https://example.com/avatar.jpg'
+),
+(
+  gen_random_uuid(),
+  NOW(),
+  'test2',
+  'test2@example.com',
+  'https://example.com/avatar.jpg'
 );
 
 INSERT INTO game_tables (id, created_at, status, current_turn)
@@ -15,14 +22,14 @@ VALUES (
   (SELECT id FROM users WHERE username = 'test')
 );
 
-INSERT INTO tiles (game_id, tile_id)
+INSERT INTO tiles (game_id, tile_kind)
 SELECT 
   g.id, 
-  t.tile_id
+  t.tile_kind
 FROM 
   game_tables g, 
   LATERAL (
-    SELECT generate_series(1, 108) AS tile_id
+    SELECT generate_series(1, 108) AS tile_kind
   ) AS t
 WHERE g.status = 'ongoing';
   
