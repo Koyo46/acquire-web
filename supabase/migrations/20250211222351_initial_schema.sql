@@ -20,7 +20,14 @@ CREATE TABLE game_tables (
   winner UUID REFERENCES users(id) -- 勝者（ゲーム終了時）
 );
 
--- 3️⃣ `tiles` テーブル（盤面のタイル管理）
+-- 3️⃣ `game_players` テーブル（ゲームに参加しているプレイヤー）
+CREATE TABLE game_players (
+  id SERIAL PRIMARY KEY,
+  game_id UUID REFERENCES game_tables(id) ON DELETE CASCADE,
+  player_id UUID REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- 4️⃣ `tiles` テーブル（盤面のタイル管理）
 CREATE TABLE tiles (
   id SERIAL PRIMARY KEY,
   tile_kind INT,
@@ -29,7 +36,7 @@ CREATE TABLE tiles (
   placed BOOLEAN DEFAULT FALSE -- 配置済みかどうか
 );
 
--- 4️⃣ `hands` テーブル（プレイヤーの手牌管理）
+-- 5️⃣ `hands` テーブル（プレイヤーの手牌管理）
 CREATE TABLE hands (
   id SERIAL PRIMARY KEY,
   game_id UUID REFERENCES game_tables(id) ON DELETE CASCADE,

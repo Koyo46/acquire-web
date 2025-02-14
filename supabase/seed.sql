@@ -22,6 +22,16 @@ VALUES (
   (SELECT id FROM users WHERE username = 'test')
 );
 
+INSERT INTO game_players (game_id, player_id)
+VALUES (
+  (SELECT id FROM game_tables WHERE status = 'ongoing'),
+  (SELECT id FROM users WHERE username = 'test')
+),
+(
+  (SELECT id FROM game_tables WHERE status = 'ongoing'),
+  (SELECT id FROM users WHERE username = 'test2')
+);
+
 INSERT INTO tiles (game_id, tile_kind)
 SELECT 
   g.id, 
