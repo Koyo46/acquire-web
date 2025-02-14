@@ -2,12 +2,14 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "@/src/utils/supabaseClient";
 import GameBoard from "@/src/app/components/GameBoard";
-
+import SelectPlayer from "./selectPlayer/page";
+import { useSearchParams } from "next/navigation";
 export default function Page() {
-  const [gameId, setGameId] = useState<string | null>(null);
-  const [playerId, setPlayerId] = useState<string | null>(null);
+  const [gameId, setGameId] = useState<string>("");
   const [players, setPlayers] = useState<string[]>([]);
-
+  const searchParams = useSearchParams();
+  const playerId = searchParams.get("playerId");
+  console.log(playerId);
   useEffect(() => {
     const fetchGameData = async () => {
       // 進行中のゲームを取得
@@ -24,32 +26,22 @@ export default function Page() {
 
       setGameId(gameData.id);
 
-      // ユーザーを仮で取得（将来的にはログイン機能と連携）
-      const { data: userData, error: userError } = await supabase
-        .from("users")
-        .select("id")
-        .eq("username", "test") // 仮のユーザー
-        .single();
 
-      if (userError || !userData) {
-        console.error("ユーザーの取得エラー:", userError);
-        return;
-      }
+      const fetchGamePlayers = async (gameId: string) => {
+        const { data, error } = await supabase
+          .from("game_players")
+          .select("player_id")
+          .eq("game_id", gameId);
 
-      setPlayerId(userData.id);
+        if (error) {
+          console.error("プレイヤーリスト取得エラー:", error);
+          return [];
+        }
 
-      // ゲームに参加しているプレイヤー一覧を取得
-      const { data: playerData, error: playerError } = await supabase
-        .from("hands")
-        .select("player_id")
-        .eq("game_id", gameData.id);
+        return data.map(({ player_id }) => player_id);
+      };
 
-      if (playerError) {
-        console.error("プレイヤーリスト取得エラー:", playerError);
-        return;
-      }
-
-      const playerIds = [...new Set(playerData.map(p => p.player_id))];
+      const playerIds = await fetchGamePlayers(gameData.id);
       setPlayers(playerIds);
     };
 
@@ -57,12 +49,8 @@ export default function Page() {
   }, []);
 
   return (
-    <div className="flex flex-col items-center min-h-screen bg-gray-100 p-4">
-      {gameId && playerId ? (
-        <GameBoard gameId={gameId} playerId={playerId} players={players} />
-      ) : (
-        <p className="text-gray-500">ゲームデータを読み込んでいます...</p>
-      )}
-    </div>
+    <div>
+      <GameBoard gameId={gameId} playerId={playerId} players={players} />
+    </div >
   );
 }

@@ -37,7 +37,6 @@ export const useTurn = (gameId: string) => {
       .from("game_tables")
       .update({ current_turn: nextPlayerId })
       .eq("id", gameId);
-    console.log(data);
     if (error) console.error("ターン更新エラー:", error);
   };
 
