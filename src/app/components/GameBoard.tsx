@@ -7,9 +7,13 @@ import TurnManager from "./TurnManager";
 export default function GameBoard({ gameId, playerId, players }: { gameId: string, playerId: string, players: string[] }) {
 
   return (
-    <div>
-      <TurnManager gameId={gameId} playerId={playerId} players={players} />
-      <Grid gameId={gameId} playerId={playerId} />
+    <div className="flex flex-row">
+      <div className="w-1/4">
+        <TurnManager gameId={gameId} playerId={playerId} />
+      </div>
+      <div className="w-3/4">
+        <Grid gameId={gameId} playerId={playerId} players={players} />
+      </div>
     </div>
   );
 }
