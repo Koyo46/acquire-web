@@ -14,7 +14,7 @@ CREATE TABLE users (
 CREATE TABLE game_tables (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   created_at TIMESTAMP DEFAULT NOW(),
-  status TEXT CHECK (status IN ('waiting', 'ongoing', 'completed')) DEFAULT 'waiting',
+  status TEXT CHECK (status IN ('waiting', 'ongoing','started', 'completed')) DEFAULT 'waiting',
   current_turn UUID REFERENCES users(id), -- 現在のターンのプレイヤー
   turn_order UUID[] NOT NULL DEFAULT '{}',-- ゲーム内のプレイヤーの順番
   winner UUID REFERENCES users(id) -- 勝者（ゲーム終了時）
@@ -33,7 +33,8 @@ CREATE TABLE tiles (
   tile_kind INT,
   game_id UUID REFERENCES game_tables(id) ON DELETE CASCADE,
   owner_id UUID REFERENCES users(id), -- そのタイルを持つプレイヤー
-  placed BOOLEAN DEFAULT FALSE -- 配置済みかどうか
+  placed BOOLEAN DEFAULT FALSE, -- 配置済みかどうか
+  dealed BOOLEAN DEFAULT FALSE  -- 配られたかどうか
 );
 
 -- 5️⃣ `hands` テーブル（プレイヤーの手牌管理）
@@ -43,3 +44,18 @@ CREATE TABLE hands (
   player_id UUID REFERENCES users(id) ON DELETE CASCADE,
   tile_id INT REFERENCES tiles(id) ON DELETE CASCADE -- タイルの ID
 );
+
+CREATE OR REPLACE FUNCTION check_max_hand_size()
+RETURNS TRIGGER AS $$
+BEGIN
+  -- 指定した player_id の手牌の数をカウント
+  IF (SELECT COUNT(*) FROM hands WHERE game_id = NEW.game_id AND player_id = NEW.player_id) >= 6 THEN
+    RAISE EXCEPTION 'プレイヤーの手札は6枚までしか持てません';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER enforce_hand_limit
+BEFORE INSERT ON hands
+FOR EACH ROW EXECUTE FUNCTION check_max_hand_size();
