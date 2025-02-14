@@ -411,17 +411,25 @@ export default function Grid({ gameId, playerId }: { gameId: string, playerId: s
     setSelectedTile(null);
     setAvailableHotels(availableHotels.filter((hotel) => hotel !== hotelName));
   };
+
   const renderedHotelList = useMemo(() => (
-    <div className="grid grid-cols-3 gap-2 ">
-      {completeHotelList.map((hotel, index) => (
-        <div key={`hotel-${index}`} className={`p-2 ${hotelColors[hotel.name]} rounded flex items-center`}>
-          <img src={hotelImages[hotel.name]} alt={hotel.name} className="w-8 h-8 object-contain mr-2" />
-          <span>{hotel.name}</span>
-          <span className="font-bold text-white ml-auto">{hotel.tiles} マス</span>
-        </div>
-      ))}
+    <div className="mt-4 p-4 bg-white shadow rounded w-full max-w-screen-md">
+      <div className="grid grid-cols-3 gap-3">
+        {completeHotelList.map((hotel, index) => (
+          <div key={`hotel-${index}`} className={`p-2 ${hotelColors[hotel.name]} rounded flex items-center`}>
+            <img src={hotelImages[hotel.name]} alt={hotel.name} className="w-8 h-8 object-contain mr-2" />
+            <span>{hotel.name}</span>
+            {bornNewHotel && hotel.tiles === 0 && (
+              <button className="ml-2 px-2 py-1 bg-white rounded text-sm"
+                onClick={() => handleHotelSelection(index, hotel.name)}
+              >建設する</button>
+            )}
+            <span className="font-bold text-white ml-auto">{hotel.tiles} マス</span>
+          </div>
+        ))}
+      </div>
     </div>
-  ), [completeHotelList]);
+  ), [completeHotelList, bornNewHotel]);
 
   return (
     <div className="flex flex-col items-center p-4 bg-gray-100 border border-gray-300 w-full max-w-screen-md">
