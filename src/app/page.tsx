@@ -48,7 +48,9 @@ export default function Page() {
 
   return (
     <div>
-      <GameBoard gameId={gameId} playerId={playerId} players={players} />
-    </div >
+      {gameId && playerId && (
+        <GameBoard gameId={gameId} playerId={playerId} players={players} />
+      )}
+    </div>
   );
 }

@@ -2,7 +2,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/src/utils/supabaseClient";
 import { tileKindToPosition, positionToTileKind } from "@/src/utils/tileUtils";
-import { useTurn } from "@/src/hooks/useTurn";
 import { fetchGameStarted } from "@/src/hooks/useGame";
 export default function Grid({ gameId, playerId, players }: { gameId: string, playerId: string, players: string[] }) {
 
@@ -13,7 +12,7 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
   const [playerHand, setPlayerHand] = useState<number[]>([]);
   const [pendingTile, setPendingTile] = useState<{ col: number; row: string } | null>(null);
   const [confirming, setConfirming] = useState(false);
-  const { currentTurn, endTurn } = useTurn(gameId);
+  const [currentTurn, setCurrentTurn] = useState<string | null>(null);
   const nextPlayerId = players[(players.indexOf(currentTurn || "") + 1) % players.length];
   const [putTile, setPutTile] = useState(false);
   const [isMyTurn, setIsMyTurn] = useState(currentTurn === playerId);
@@ -53,6 +52,11 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
       supabase.removeChannel(channel);
     };
   }, [gameId, playerId]);
+
+  useEffect(() => {
+    setIsMyTurn(currentTurn === playerId);
+    console.log("currentTurn", currentTurn);
+  }, [currentTurn, playerId]);
 
   const fetchTileKindById = async (gameId: string, tileId: number) => {
     const { data, error } = await supabase
@@ -155,6 +159,52 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
       supabase.removeChannel(channel);
     };
   }, [gameId]);
+
+  useEffect(() => {
+    if (!gameId) return;
+
+    console.log("🔄 useTurn: ターン情報を取得開始", gameId);
+
+    const fetchTurn = async () => {
+      const { data, error } = await supabase
+        .from("game_tables")
+        .select("current_turn")
+        .eq("id", gameId)
+        .single();
+
+      if (error) {
+        console.error("ターン取得エラー:", error);
+      } else {
+        console.log("✅ 初回ターン取得:", data.current_turn);
+        setCurrentTurn(data.current_turn);
+      }
+    };
+
+    fetchTurn();
+
+    console.log("🟢 useTurn: Realtime チャンネルを設定");
+
+    const channel = supabase
+      .channel(`game_tables`) // 一意のチャンネル名に変更
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "game_tables" }, (payload) => {
+        console.log("✅ Realtime 更新検知:", payload);
+        setCurrentTurn(payload.new.current_turn);
+      })
+      .subscribe();
+
+    return () => {
+      console.log("🛑 useTurn: Realtime チャンネルを解除");
+      supabase.removeChannel(channel);
+    };
+  }, [gameId]);
+
+  const endTurn = async (nextPlayerId: string) => {
+    const { data, error } = await supabase
+      .from("game_tables")
+      .update({ current_turn: nextPlayerId })
+      .eq("id", gameId);
+    if (error) console.error("ターン更新エラー:", error);
+  };
 
   // 開発中は自由配置可能
   const [freePlacementMode, setFreePlacementMode] = useState(true);
@@ -522,6 +572,23 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
     setAvailableHotels(availableHotels.filter((hotel) => hotel !== hotelName));
   };
 
+  const handleDrawAndEndTurn = async (playerId: string, nextPlayerId: string) => {
+    try {
+      console.log(`🎯 タイル補充開始: ${playerId}`);
+
+      await drawTilesUntil6(playerId); // タイル補充
+
+      console.log(`✅ タイル補充完了: ${playerId}`);
+      console.log(`🔄 ターン終了処理: ${nextPlayerId}`);
+
+      await endTurn(nextPlayerId); // ターンエンド
+
+      console.log(`✅ ターンが ${nextPlayerId} に更新されました！`);
+    } catch (error) {
+      console.error("❌ タイル補充 & ターンエンドエラー:", error);
+    }
+  };
+
   const renderedHotelList = useMemo(() => (
     <div className="mt-4 p-4 bg-white shadow rounded w-full max-w-screen-md">
       <div className="grid grid-cols-3 gap-3">
@@ -590,7 +657,7 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
                           ? "bg-gray-300 border-2 border-gray-500"
                           : "bg-white hover:bg-gray-200"
                     }`}
-                  onClick={() => isInPlayerHand && !putTile ? handleTilePlacement(col, row) : null}
+                  onClick={() => isInPlayerHand && isMyTurn ? handleTilePlacement(col, row) : null}
                 >
                   {hotel && home ? (
                     <img src={hotelImages[hotel.name]} alt={hotel.name} className="w-8 h-8 object-contain" />
@@ -643,26 +710,6 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
       {/* ホテルのリスト */}
       {renderedHotelList}
 
-
-      {/* ホテル選択モーダル */}
-      {bornNewHotel && (
-        <div className="mt-4 p-4 bg-white shadow rounded w-full max-w-screen-md">
-          <h3 className="text-lg font-bold">ホテルを選択</h3>
-          <div className="grid grid-cols-3 gap-2 mt-2">
-            {availableHotels.map((hotel, index) => (
-              <button
-                key={index}
-                className={`px-4 py-2 rounded ${hotelColors[hotel]}`}
-                onClick={() => handleHotelSelection(index, hotel)}
-              >
-                <img src={hotelImages[hotel]} alt={hotel} className="w-8 h-8 object-contain mr-2" />
-
-                {hotel}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
       {/* 手牌 */}
       <div className="mt-4 p-4 bg-white shadow rounded w-full max-w-screen-md">
         <h3 className="text-lg font-bold">手牌</h3>
@@ -687,13 +734,7 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
           {/* 補充ボタン（手牌が6枚未満のときのみ表示） */}
 
           <button
-            onClick={async () => {
-              await drawTilesUntil6(playerId);
-              setTimeout(async () => {
-                await endTurn(nextPlayerId);
-              }, 100);
-            }
-            }
+            onClick={() => handleDrawAndEndTurn(playerId, nextPlayerId)}
             disabled={playerHand.length >= 6}
           >
             <img src="/images/draw.webp" alt="draw" className="w-16 h-16" />
