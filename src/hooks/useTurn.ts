@@ -6,7 +6,6 @@ export const useTurn = (gameId: string) => {
 
   useEffect(() => {
     if (!gameId) return;
-
     const fetchTurn = async () => {
       const { data, error } = await supabase
         .from("game_tables")
@@ -24,6 +23,7 @@ export const useTurn = (gameId: string) => {
       .channel("game_tables")
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "game_tables" }, (payload) => {
         setCurrentTurn(payload.new.current_turn);
+        fetchTurn();
       })
       .subscribe();
 

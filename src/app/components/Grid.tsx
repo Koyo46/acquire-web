@@ -2,8 +2,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/src/utils/supabaseClient";
 import { tileKindToPosition, positionToTileKind } from "@/src/utils/tileUtils";
-
-export default function Grid({ gameId, playerId }: { gameId: string, playerId: string }) {
+import { useTurn } from "@/src/hooks/useTurn";
+export default function Grid({ gameId, playerId, players }: { gameId: string, playerId: string, players: string[] }) {
 
   const rows = 9; // A～I
   const cols = 12; // 1～12
@@ -12,6 +12,48 @@ export default function Grid({ gameId, playerId }: { gameId: string, playerId: s
   const [playerHand, setPlayerHand] = useState<number[]>([]);
   const [pendingTile, setPendingTile] = useState<{ col: number; row: string } | null>(null);
   const [confirming, setConfirming] = useState(false);
+  const { currentTurn, endTurn } = useTurn(gameId);
+  const nextPlayerId = players[(players.indexOf(currentTurn || "") + 1) % players.length];
+  const [putTile, setPutTile] = useState(false);
+  const [isMyTurn, setIsMyTurn] = useState(currentTurn === playerId);
+  const [gameStarted, setGameStarted] = useState(false);
+  // 配置されたタイルのリスト
+  const [placedTiles, setPlacedTiles] = useState<{ col: number; row: string }[]>([]);
+
+  const fetchGameStarted = async () => {
+    console.log("fetchGameStarted", gameId);
+    const { data, error } = await supabase
+      .from("game_tables")
+      .select("status")
+      .eq("id", gameId)
+      .single();
+    console.log("gameStarted", data);
+    if (error) {
+      console.error("ゲームステータス取得エラー:", error);
+      return false;
+    }
+    return data.status === "started";
+  }
+
+  useEffect(() => {
+    if (gameStarted) {
+      supabase.from("game_tables").update({ status: "started" }).eq("id", gameId);
+    }
+  }, [gameStarted]);
+
+  useEffect(() => {
+    if (!gameId) return;
+    const channel = supabase
+      .channel("game_tables")
+      .on("postgres_changes", { event: "*", schema: "public", table: "game_tables" }, async () => {
+        fetchGameStarted();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [gameId]);
 
   const fetchTileKindById = async (gameId: string, tileId: number) => {
     const { data, error } = await supabase
@@ -47,8 +89,6 @@ export default function Grid({ gameId, playerId }: { gameId: string, playerId: s
     return handKind;
   };
 
-
-
   // 手牌を取得
   useEffect(() => {
     if (!gameId || !playerId) return;
@@ -72,11 +112,54 @@ export default function Grid({ gameId, playerId }: { gameId: string, playerId: s
     };
   }, [gameId, playerId]);
 
+  const fetchTilesStatus = async () => {
+    const { data, error } = await supabase
+      .from("tiles")
+      .select("id, placed, dealed")
+      .eq("game_id", gameId);
+
+    if (error) {
+      console.error("タイルステータス取得エラー:", error);
+      return [];
+    }
+    return data;
+  }
+
+  useEffect(() => {
+    if (!gameId) return;
+    const fetchData = async () => {
+      const tiles = await fetchTilesStatus();
+      // tile_kindを取得
+      const tilesWithKind = await Promise.all(tiles.map(async tile => {
+        const tileKind = await fetchTileKindById(gameId, tile.id);
+        return {
+          ...tile,
+          tile_kind: tileKind
+        };
+      }));
+
+      setPlacedTiles(tilesWithKind.filter(tile => tile.placed).map(tile => {
+        const { col, row } = tileKindToPosition(tile.tile_kind);
+        return { col, row };
+      }));
+    };
+    fetchData();
+
+    const channel = supabase
+      .channel("tiles")
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "tiles" }, async () => {
+        fetchData();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [gameId]);
+
   // 開発中は自由配置可能
   const [freePlacementMode, setFreePlacementMode] = useState(true);
 
-  // 配置されたタイルのリスト
-  const [placedTiles, setPlacedTiles] = useState<{ col: number; row: string }[]>([]);
 
   // ホテルのリスト
   const [establishedHotels, setEstablishedHotels] = useState<{
@@ -132,36 +215,54 @@ export default function Grid({ gameId, playerId }: { gameId: string, playerId: s
     return tier === "low" ? 800 : tier === "medium" ? 1000 : 1200;
   };
 
-  const dealTiles = async (playerId: string) => {
+  const dealTiles = async () => {
     // 空いているタイルを取得
     const { data: availableTiles, error } = await supabase
       .from("tiles")
       .select("id")
       .eq("game_id", gameId)
-      .eq("placed", false);
+      .eq("placed", false)
+      .eq("dealed", false);
 
     if (error) {
       console.error("タイル取得エラー:", error);
       return;
     }
 
-    for (let i = 0; i < 6; i++) {
-      // ランダムに1枚補充を試みる
-      let newTile;
-      do {
-        newTile = availableTiles.sort(() => Math.random() - 0.5)[0];
-      } while (!newTile);
+    for (let i = 0; i < players.length; i++) {
+      for (let j = 0; j < 6; j++) {
+        // ランダムに1枚補充を試みる
+        let newTile;
+        do {
+          newTile = availableTiles.sort(() => Math.random() - 0.5)[0];
+          if (newTile) {
+            availableTiles.splice(availableTiles.indexOf(newTile), 1);
+          }
+        } while (!newTile);
 
 
-      // 手牌に追加
-      const { error: insertError } = await supabase
-        .from("hands")
-        .insert({ game_id: gameId, player_id: playerId, tile_id: newTile.id });
+        // 手牌に追加
+        const { error: insertError } = await supabase
+          .from("hands")
+          .insert({ game_id: gameId, player_id: players[i], tile_id: newTile.id });
 
-      if (insertError) {
-        console.error("手牌追加エラー:", insertError);
+        if (insertError) {
+          console.error("手牌追加エラー:", insertError);
+        }
+
+        // タイルを配付済みにする
+        const { error: updateError } = await supabase
+          .from("tiles")
+          .update({ dealed: true })
+          .eq("game_id", gameId)
+          .eq("id", newTile.id);
+
+        if (updateError) {
+          console.error("タイル配付エラー:", updateError);
+        }
       }
     }
+    setGameStarted(true);
   };
 
   const removeTileFromHand = async (gameId: string, playerId: string, col: number, row: string) => {
@@ -224,7 +325,8 @@ export default function Grid({ gameId, playerId }: { gameId: string, playerId: s
       .from("tiles")
       .select("id")
       .eq("game_id", gameId)
-      .eq("placed", false);
+      .eq("placed", false)
+      .eq("dealed", false);
 
     if (tileError) {
       console.error("タイル取得エラー:", tileError);
@@ -239,6 +341,13 @@ export default function Grid({ gameId, playerId }: { gameId: string, playerId: s
     // ランダムに tilesToDraw 枚補充
     const newTiles = availableTiles.sort(() => Math.random() - 0.5).slice(0, tilesToDraw);
 
+    // タイルを配付済みにする
+    const { error: updateError } = await supabase
+      .from("tiles")
+      .update({ dealed: true })
+      .eq("game_id", gameId)
+      .in("id", newTiles.map(tile => tile.id));
+
     // Supabase に追加
     const { error: insertError } = await supabase
       .from("hands")
@@ -252,6 +361,7 @@ export default function Grid({ gameId, playerId }: { gameId: string, playerId: s
     const newTilesKind = await Promise.all(newTiles.map(tile => fetchTileKindById(gameId, tile.id)));
     // 手牌を更新
     setPlayerHand(prev => [...prev, ...newTilesKind]);
+    setPutTile(false);
 
     if (insertError) {
       console.error("手牌追加エラー:", insertError);
@@ -291,14 +401,14 @@ export default function Grid({ gameId, playerId }: { gameId: string, playerId: s
     // 状態をリセット
     setPendingTile(null);
     setConfirming(false);
+
+    setPutTile(true);
   };
 
   const cancelTilePlacement = () => {
     setPendingTile(null);
     setConfirming(false);
   };
-
-
 
   // ホテル選択モーダルの状態
   const [selectedTile, setSelectedTile] = useState<{ col: number; row: string; adjacentTiles: { col: number; row: string }[] } | null>(null);
@@ -434,9 +544,13 @@ export default function Grid({ gameId, playerId }: { gameId: string, playerId: s
   return (
     <div className="flex flex-col items-center p-4 bg-gray-100 border border-gray-300 w-full max-w-screen-md">
       {/* 手牌を配るボタン */}
-      <button className="px-4 py-2 bg-blue-300 rounded" onClick={() => dealTiles(playerId)}>
-        手牌を配る
+      {!gameStarted && <button className="px-4 py-2 bg-blue-300 rounded" onClick={async () => {
+        await dealTiles();
+      }}
+      >
+        START
       </button>
+      }
       {/* グリッド */}
       <div className="grid grid-cols-[auto_repeat(12,minmax(2rem,1fr))] gap-1">
         {/* 上部のカラムラベル */}
@@ -467,7 +581,7 @@ export default function Grid({ gameId, playerId }: { gameId: string, playerId: s
               return (
                 <div
                   key={`cell-${col}${row}`}
-                  className={`w-10 h-10 flex items-center justify-center border ${isInPlayerHand ? 'border-red-500 border-2' : 'border-gray-400'} ${bornNewHotel ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
+                  className={`w-10 h-10 flex items-center justify-center border ${isInPlayerHand && !putTile ? 'border-red-500 border-2' : 'border-gray-400'} ${bornNewHotel ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
                     } ${hotel
                       ? hotelColors[hotel.name]
                       : isSelected
@@ -476,7 +590,7 @@ export default function Grid({ gameId, playerId }: { gameId: string, playerId: s
                           ? "bg-gray-300 border-2 border-gray-500"
                           : "bg-white hover:bg-gray-200"
                     }`}
-                  onClick={() => isInPlayerHand ? handleTilePlacement(col, row) : null}
+                  onClick={() => isInPlayerHand && !putTile ? handleTilePlacement(col, row) : null}
                 >
                   {hotel && home ? (
                     <img src={hotelImages[hotel.name]} alt={hotel.name} className="w-8 h-8 object-contain" />
@@ -558,8 +672,12 @@ export default function Grid({ gameId, playerId }: { gameId: string, playerId: s
             {playerHand.map((tileKind, index) => {
               const { col, row } = tileKindToPosition(tileKind);
               return (
-                <button key={index} className="w-16 h-16 bg-gray-400"
-                  onClick={() => handleTilePlacement(col, row)}>
+                <button
+                  key={index}
+                  className="w-16 h-16 bg-gray-400"
+                  onClick={() => handleTilePlacement(col, row)}
+                  disabled={putTile || !isMyTurn}
+                >
                   {col}{row}
                 </button>
               );
@@ -569,8 +687,13 @@ export default function Grid({ gameId, playerId }: { gameId: string, playerId: s
           {/* 補充ボタン（手牌が6枚未満のときのみ表示） */}
 
           <button
-            className="ml-4 px-4 py-2 text-white rounded shadow-md border-2 border-black"
-            onClick={() => drawTilesUntil6(playerId)}
+            onClick={async () => {
+              await drawTilesUntil6(playerId);
+              setTimeout(async () => {
+                await endTurn(nextPlayerId);
+              }, 100);
+            }
+            }
             disabled={playerHand.length >= 6}
           >
             <img src="/images/draw.webp" alt="draw" className="w-16 h-16" />
