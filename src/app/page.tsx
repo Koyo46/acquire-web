@@ -9,14 +9,12 @@ export default function Page() {
   const [players, setPlayers] = useState<string[]>([]);
   const searchParams = useSearchParams();
   const playerId = searchParams.get("playerId");
-  console.log(playerId);
   useEffect(() => {
     const fetchGameData = async () => {
       // 進行中のゲームを取得
       const { data: gameData, error: gameError } = await supabase
         .from("game_tables")
         .select("id")
-        .eq("status", "ongoing")
         .single();
 
       if (gameError || !gameData) {

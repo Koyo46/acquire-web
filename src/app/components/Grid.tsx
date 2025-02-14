@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/src/utils/supabaseClient";
 import { tileKindToPosition, positionToTileKind } from "@/src/utils/tileUtils";
 import { useTurn } from "@/src/hooks/useTurn";
+import { fetchGameStarted } from "@/src/hooks/useGame";
 export default function Grid({ gameId, playerId, players }: { gameId: string, playerId: string, players: string[] }) {
 
   const rows = 9; // A～I
@@ -20,21 +21,6 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
   // 配置されたタイルのリスト
   const [placedTiles, setPlacedTiles] = useState<{ col: number; row: string }[]>([]);
 
-  const fetchGameStarted = async () => {
-    console.log("fetchGameStarted", gameId);
-    const { data, error } = await supabase
-      .from("game_tables")
-      .select("status")
-      .eq("id", gameId)
-      .single();
-    console.log("gameStarted", data);
-    if (error) {
-      console.error("ゲームステータス取得エラー:", error);
-      return false;
-    }
-    return data.status === "started";
-  }
-
   useEffect(() => {
     if (gameStarted) {
       supabase.from("game_tables").update({ status: "started" }).eq("id", gameId);
@@ -43,17 +29,30 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
 
   useEffect(() => {
     if (!gameId) return;
+
+    const fetchData = async () => {
+      const isGameStarted = await fetchGameStarted(gameId);
+      if (isGameStarted) {
+        setGameStarted(true);
+      }
+    };
+
+    fetchData();
+
     const channel = supabase
       .channel("game_tables")
       .on("postgres_changes", { event: "*", schema: "public", table: "game_tables" }, async () => {
-        fetchGameStarted();
+        const isGameStarted = await fetchGameStarted(gameId);
+        if (isGameStarted) {
+          setGameStarted(true);
+        }
       })
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [gameId]);
+  }, [gameId, playerId]);
 
   const fetchTileKindById = async (gameId: string, tileId: number) => {
     const { data, error } = await supabase
@@ -147,7 +146,7 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
 
     const channel = supabase
       .channel("tiles")
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "tiles" }, async () => {
+      .on("postgres_changes", { event: "*", schema: "public", table: "tiles" }, async () => {
         fetchData();
       })
       .subscribe();
@@ -263,6 +262,7 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
       }
     }
     setGameStarted(true);
+    await supabase.from("game_tables").update({ status: "started" }).eq("id", gameId);
   };
 
   const removeTileFromHand = async (gameId: string, playerId: string, col: number, row: string) => {
