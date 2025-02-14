@@ -5,7 +5,7 @@ import GameBoard from "@/src/app/components/GameBoard";
 import SelectPlayer from "./selectPlayer/page";
 import { useSearchParams } from "next/navigation";
 export default function Page() {
-  const [gameId, setGameId] = useState<string>("");
+  const [gameId, setGameId] = useState<string | null>(null);
   const [players, setPlayers] = useState<string[]>([]);
   const searchParams = useSearchParams();
   const playerId = searchParams.get("playerId");
