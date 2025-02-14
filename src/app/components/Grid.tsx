@@ -1,7 +1,7 @@
 "use client";
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/src/utils/supabaseClient";
-import { tileKindToPosition, positionToTileKind } from "@/src/utils/tileUtils";
+import { tileKindToPosition, positionToTileKind, tileIdToPosition } from "@/src/utils/tileUtils";
 import { fetchGameStarted } from "@/src/hooks/useGame";
 export default function Grid({ gameId, playerId, players }: { gameId: string, playerId: string, players: string[] }) {
 
@@ -53,11 +53,6 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
     };
   }, [gameId, playerId]);
 
-  useEffect(() => {
-    setIsMyTurn(currentTurn === playerId);
-    console.log("currentTurn", currentTurn);
-  }, [currentTurn, playerId]);
-
   const fetchTileKindById = async (gameId: string, tileId: number) => {
     const { data, error } = await supabase
       .from("tiles")
@@ -73,6 +68,36 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
 
     return data.tile_kind; // `tile_kind` を返す
   };
+
+  //placedTilesを更新
+  useEffect(() => {
+    const fetchData = async () => {
+      const tiles = await fetchTilesStatus();
+      const positions = await Promise.all(tiles.map(async tile => {
+        const position = await tileIdToPosition(tile.id, gameId);
+        if (position) {
+          const { col, row } = position;
+          return { col, row };
+        }
+        return null; // 位置が取得できない場合は null を返す
+      }));
+      // null を除外
+      const validPositions = positions.filter(position => position !== null);
+      setPlacedTiles(validPositions);
+    };
+    fetchData();
+
+    const channel = supabase
+      .channel("tiles")
+      .on("postgres_changes", { event: "*", schema: "public", table: "tiles" }, async () => {
+        fetchData();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [gameId]);
 
   const fetchPlayerHand = async (gameId: string, playerId: string) => {
     const { data, error } = await supabase
@@ -162,9 +187,6 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
 
   useEffect(() => {
     if (!gameId) return;
-
-    console.log("🔄 useTurn: ターン情報を取得開始", gameId);
-
     const fetchTurn = async () => {
       const { data, error } = await supabase
         .from("game_tables")
@@ -175,8 +197,11 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
       if (error) {
         console.error("ターン取得エラー:", error);
       } else {
-        console.log("✅ 初回ターン取得:", data.current_turn);
         setCurrentTurn(data.current_turn);
+        console.log("currentTurn", data.current_turn);
+        if (data.current_turn === playerId) {
+          setIsMyTurn(true);
+        }
       }
     };
 
@@ -186,9 +211,9 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
 
     const channel = supabase
       .channel(`game_tables`) // 一意のチャンネル名に変更
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "game_tables" }, (payload) => {
+      .on("postgres_changes", { event: "*", schema: "public", table: "game_tables" }, (payload) => {
         console.log("✅ Realtime 更新検知:", payload);
-        setCurrentTurn(payload.new.current_turn);
+        fetchTurn();
       })
       .subscribe();
 
@@ -196,7 +221,7 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
       console.log("🛑 useTurn: Realtime チャンネルを解除");
       supabase.removeChannel(channel);
     };
-  }, [gameId]);
+  }, [currentTurn]);
 
   const endTurn = async (nextPlayerId: string) => {
     const { data, error } = await supabase
@@ -574,18 +599,11 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
 
   const handleDrawAndEndTurn = async (playerId: string, nextPlayerId: string) => {
     try {
-      console.log(`🎯 タイル補充開始: ${playerId}`);
-
       await drawTilesUntil6(playerId); // タイル補充
-
-      console.log(`✅ タイル補充完了: ${playerId}`);
-      console.log(`🔄 ターン終了処理: ${nextPlayerId}`);
-
       await endTurn(nextPlayerId); // ターンエンド
-
-      console.log(`✅ ターンが ${nextPlayerId} に更新されました！`);
+      setIsMyTurn(false);
     } catch (error) {
-      console.error("❌ タイル補充 & ターンエンドエラー:", error);
+      console.error("タイル補充 & ターンエンドエラー:", error);
     }
   };
 

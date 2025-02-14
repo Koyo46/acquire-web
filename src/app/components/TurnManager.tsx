@@ -7,6 +7,7 @@ export default function TurnManager({ gameId, playerId }: { gameId: string, play
   useEffect(() => {
     const fetchData = async () => {
       const isGameStarted = await fetchGameStarted(gameId);
+      console.log("isGameStarted", isGameStarted);
       setGameStarted(isGameStarted);
     };
     fetchData();
@@ -22,7 +23,7 @@ export default function TurnManager({ gameId, playerId }: { gameId: string, play
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [gameId]);
+  }, []);
 
   useEffect(() => {
     if (!gameId) return;
