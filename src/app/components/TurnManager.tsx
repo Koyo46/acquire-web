@@ -4,19 +4,23 @@ import { supabase } from "@/src/utils/supabaseClient";
 export default function TurnManager({ gameId, playerId }: { gameId: string, playerId: string }) {
   const [gameStarted, setGameStarted] = useState(false);
   const [isMyTurn, setIsMyTurn] = useState(false);
-  const { currentTurn, fetchGameStarted } = useGame();
+  const { currentTurn, fetchGameStarted } = useGame() || {};
   useEffect(() => {
     const fetchData = async () => {
-      const isGameStarted = await fetchGameStarted(gameId);
-      setGameStarted(isGameStarted);
+      if (fetchGameStarted) {
+        const isGameStarted = await fetchGameStarted(gameId);
+        setGameStarted(isGameStarted);
+      }
     };
     fetchData();
 
     const channel = supabase
       .channel("game_tables")
       .on("postgres_changes", { event: "*", schema: "public", table: "game_tables" }, async () => {
-        const isGameStarted = await fetchGameStarted(gameId);
-        setGameStarted(isGameStarted);
+        if (fetchGameStarted) {
+          const isGameStarted = await fetchGameStarted(gameId);
+          setGameStarted(isGameStarted);
+        }
       })
       .subscribe();
 

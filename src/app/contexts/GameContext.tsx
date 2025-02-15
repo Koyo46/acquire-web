@@ -1,9 +1,16 @@
-import { createContext, useContext, useState, useEffect } from "react";
+import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { supabase } from "@/src/utils/supabaseClient";
 
-const GameContext = createContext<any>(null);
+interface GameContextType {
+  currentTurn: string | null;
+  endTurn: (nextPlayerId: string) => Promise<void>;
+  fetchGameStarted: (gameId: string) => Promise<boolean>;
+  gameStarted: boolean;
+}
 
-export const GameProvider = ({ gameId, children }: { gameId: string, children: React.ReactNode }) => {
+const GameContext = createContext<GameContextType | null>(null);
+
+export const GameProvider = ({ gameId, children }: { gameId: string, children: ReactNode }) => {
   const [currentTurn, setCurrentTurn] = useState<string | null>(null);
   const [gameStarted, setGameStarted] = useState(false);
 
