@@ -19,7 +19,7 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
   // 配置されたタイルのリスト
   const [placedTiles, setPlacedTiles] = useState<{ col: number; row: string }[]>([]);
   // 開発中は自由配置可能
-  const [freePlacementMode] = useState(true);
+  const [freePlacementMode] = useState(false);
   const fetchTileKindById = async (gameId: string, tileId: number) => {
     const { data, error } = await supabase
       .from("tiles")
