@@ -19,7 +19,7 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
   // 配置されたタイルのリスト
   const [placedTiles, setPlacedTiles] = useState<{ col: number; row: string }[]>([]);
   // 開発中は自由配置可能
-  const [freePlacementMode] = useState(false);
+  const [freePlacementMode, setFreePlacementMode] = useState(false);
   const fetchTileKindById = async (gameId: string, tileId: number) => {
     const { data, error } = await supabase
       .from("tiles")
@@ -766,7 +766,6 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
           </div>
         </div>
       )}
-      {/* 配置されたタイルのリスト */}
       <div className="mt-4 p-4 bg-white shadow rounded w-full max-w-screen-md">
         <div className="flex flex-row">
           <div className="w-3/4">
@@ -788,11 +787,15 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
               })}
             </div>
           </div>
+          <button className="w-1/4 text-center font-bold" onClick={() => setFreePlacementMode(!freePlacementMode)}>
+            {freePlacementMode ? "自由選択モード" : "固定選択モード"}
+          </button>
           <div className="flex flex-row w-1/4 justify-end">
             {/* 補充ボタン（手牌が6枚未満のときのみ有効） */}
             <button
               onClick={() => handleDrawAndEndTurn(playerId, nextPlayerId)}
-              className={playerHand.length >= 6 ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}
+              className={`${playerHand.length >= 6 ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'} ${bornNewHotel ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
+              disabled={playerHand.length >= 6 || freePlacementMode || bornNewHotel}
             >
               <img src="/images/draw.webp" alt="draw" className="w-16 h-16" />
             </button>
