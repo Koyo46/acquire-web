@@ -22,6 +22,7 @@ export default function TurnManager({ gameId, playerId }: { gameId: string, play
           const isGameStarted = await fetchGameStarted(gameId);
           console.log("🔍 ゲームスタートチェック:", isGameStarted);
           setGameStarted(isGameStarted);
+          setIsMyTurn(currentTurn === playerId);
         }
       })
       .subscribe();
