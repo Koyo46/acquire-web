@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/src/utils/supabaseClient";
 import { tileKindToPosition, positionToTileKind, tileIdToPosition, positionToTileId } from "@/src/utils/tileUtils";
 import { useGame } from "@/src/app/contexts/GameContext";
+import { getStockPriceByHotelName } from "@/src/utils/hotelStockBoard";
 export default function Grid({ gameId, playerId, players }: { gameId: string, playerId: string, players: string[] }) {
 
   // const rows = 9; // A～I
@@ -14,8 +15,6 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
   const [confirming, setConfirming] = useState(false);
   const { currentTurn, endTurn, fetchGameStarted } = useGame() || {};
   const [gameStarted, setGameStarted] = useState(false);
-
-  console.log("🔍 ゲームスタートチェック:", gameStarted);
   const nextPlayerId = players[(players.indexOf(currentTurn || "") + 1) % players.length];
   const [putTile, setPutTile] = useState(false);
   const [isMyTurn, setIsMyTurn] = useState(currentTurn === playerId);
@@ -23,6 +22,7 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
   const [placedTiles, setPlacedTiles] = useState<{ col: number; row: string }[]>([]);
   // 開発中は自由配置可能
   const [freePlacementMode, setFreePlacementMode] = useState(false);
+  const [stocksBoughtThisTurn, setStocksBoughtThisTurn] = useState(0);
   useEffect(() => {
     const fetchData = async () => {
       if (fetchGameStarted) {
@@ -318,6 +318,7 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
       await endTurn(nextPlayerId);
     }
     await supabase.from("game_tables").update({ status: "started" }).eq("id", gameId);
+    await supabase.from("users").update({ balance: 6000 }).eq("game_id", gameId);
   };
 
   const removeTileFromHand = async (gameId: string, playerId: string, col: number, row: string) => {
@@ -671,6 +672,50 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
       }
     ]);
 
+    // 3️⃣ ホテル投資家を追加
+    const { data: investorData, error: investorError } = await supabase
+      .from("hotel_investors")
+      .select("shares")
+      .eq("hotel_name", hotelName)
+      .eq("user_id", playerId)
+      .eq("game_id", gameId);
+
+    if (investorError) {
+      console.error("ホテル投資家取得エラー:", investorError);
+      return;
+    }
+
+    if (investorData.length === 0) {
+      const { error: hotelInvestorError } = await supabase
+        .from("hotel_investors")
+        .insert({
+          hotel_name: hotelName,
+          user_id: playerId,
+          game_id: gameId,
+          shares: 1
+        });
+      if (hotelInvestorError) {
+        console.error("ホテル投資家更新エラー:", hotelInvestorError);
+        return;
+      }
+    } else {
+      const currentShares = investorData[0].shares;
+
+      const { error: hotelInvestorError } = await supabase
+        .from("hotel_investors")
+        .update({
+          shares: currentShares + 1
+        })
+        .eq("hotel_name", hotelName)
+        .eq("user_id", playerId)
+        .eq("game_id", gameId);
+
+      if (hotelInvestorError) {
+        console.error("ホテル投資家更新エラー:", hotelInvestorError);
+        return;
+      }
+    }
+
     setBornNewHotel(false);
     setSelectedTile(null);
   };
@@ -682,8 +727,102 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
         await endTurn(nextPlayerId); // ターンエンド
       }
       setIsMyTurn(false);
+      setStocksBoughtThisTurn(0);
     } catch (error) {
       console.error("タイル補充 & ターンエンドエラー:", error);
+    }
+  };
+
+  const handleBuyStock = async (hotelName: string) => {
+    if (stocksBoughtThisTurn >= 3) {
+      alert("1ターンで購入できる株券は3枚までです。");
+      return;
+    }
+    const { data, error } = await supabase.from("hotel_investors").select("shares").eq("hotel_name", hotelName).eq("user_id", playerId);
+    console.log(data);
+    if (error) {
+      console.error("ホテル取得エラー:", error);
+      return;
+    } else if (data.length === 0) {
+      console.log(`${hotelName} の株券を買います`);
+
+
+
+      const stockPrice = await getStockPriceByHotelName(hotelName);
+
+      // プレイヤーの所持金を更新
+      const { data: userData, error: userError } = await supabase
+        .from("users")
+        .select("balance")
+        .eq("id", playerId)
+        .single();
+
+      if (userError || !userData) {
+        console.error("所持金取得エラー:", userError);
+        return;
+      }
+
+      const newBalance = userData.balance - stockPrice;
+      console.log(newBalance);
+      const { error: balanceError } = await supabase
+        .from("users")
+        .update({ balance: newBalance })
+        .eq("id", playerId);
+
+      if (balanceError) {
+        console.error("所持金更新エラー:", balanceError);
+        return;
+      }
+
+      const { error } = await supabase.from("hotel_investors").insert({
+        hotel_name: hotelName,
+        user_id: playerId,
+        game_id: gameId,
+        shares: 1
+      });
+      if (error) {
+        console.error("株券取得エラー:", error);
+        return;
+      }
+      setStocksBoughtThisTurn(prev => prev + 1);
+    } else {
+      const stockPrice = await getStockPriceByHotelName(hotelName);
+
+      // プレイヤーの所持金を更新
+      const { data: userData, error: userError } = await supabase
+        .from("users")
+        .select("balance")
+        .eq("id", playerId)
+        .single();
+
+      if (userError || !userData) {
+        console.error("所持金取得エラー:", userError);
+        return;
+      }
+
+      const newBalance = userData.balance - stockPrice;
+      console.log(newBalance);
+      const { error: balanceError } = await supabase
+        .from("users")
+        .update({ balance: newBalance })
+        .eq("id", playerId);
+
+      if (balanceError) {
+        console.error("所持金更新エラー:", balanceError);
+        return;
+      }
+      const { error } = await supabase.from("hotel_investors")
+        .update({
+          shares: data[0].shares + 1
+        })
+        .eq("hotel_name", hotelName)
+        .eq("user_id", playerId)
+        .eq("game_id", gameId);
+      if (error) {
+        console.error("株券取得エラー:", error);
+        return;
+      }
+      setStocksBoughtThisTurn(prev => prev + 1);
     }
   };
 
@@ -692,6 +831,8 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
     await supabase.from("hotels").delete().eq("game_id", gameId);
     await supabase.from("tiles").update({ placed: false, dealed: false }).eq("game_id", gameId);
     await supabase.from("game_tables").update({ current_turn: null, status: "ongoing" }).eq("id", gameId);
+    await supabase.from("hotel_investors").delete().eq("game_id", gameId);
+    await supabase.from("users").update({ balance: 6000 }).in("id", players);
     setEstablishedHotels([]);
     setPlacedTiles([]);
     setPlayerHand([]);
@@ -708,6 +849,11 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
           <div key={`hotel-${index}`} className={`p-2 ${hotelColors[hotel.name]} rounded flex items-center`}>
             <img src={hotelImages[hotel.name]} alt={hotel.name} className="w-8 h-8 object-contain mr-2" />
             <span>{hotel.name}</span>
+            {(putTile && isMyTurn && hotel.tiles > 0 && !bornNewHotel) && (
+              <button className="ml-2 px-2 py-1 bg-white rounded text-sm"
+                onClick={() => handleBuyStock(hotel.name)}
+                disabled={stocksBoughtThisTurn >= 3}
+              >株券を買う</button>)}
             {bornNewHotel && hotel.tiles === 0 && (
               <button className="ml-2 px-2 py-1 bg-white rounded text-sm"
                 onClick={() => handleHotelSelection(index, hotel.name)}
@@ -718,7 +864,7 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
         ))}
       </div>
     </div>
-  ), [completeHotelList, bornNewHotel]);
+  ), [completeHotelList, bornNewHotel, stocksBoughtThisTurn]);
 
   return (
     <div className="flex flex-col items-center p-4 bg-gray-100 border border-gray-300 w-full max-w-screen-md">
