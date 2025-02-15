@@ -7,6 +7,7 @@ interface GameContextType {
   endTurn: (nextPlayerId: string) => Promise<void>;
   fetchGameStarted: (gameId: string) => Promise<boolean>;
   gameStarted: boolean;
+  setGameStarted: (gameStarted: boolean) => void;
 }
 
 const GameContext = createContext<GameContextType | null>(null);
@@ -71,7 +72,7 @@ export const GameProvider = ({ gameId, children }: { gameId: string, children: R
   };
 
   return (
-    <GameContext.Provider value={{ currentTurn, endTurn, fetchGameStarted, gameStarted }}>
+    <GameContext.Provider value={{ currentTurn, endTurn, fetchGameStarted, gameStarted, setGameStarted }}>
       {children}
     </GameContext.Provider>
   );

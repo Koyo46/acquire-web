@@ -12,7 +12,7 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
   const [playerHand, setPlayerHand] = useState<number[]>([]);
   const [pendingTile, setPendingTile] = useState<{ col: number; row: string } | null>(null);
   const [confirming, setConfirming] = useState(false);
-  const { currentTurn, gameStarted } = useGame() || {};
+  const { currentTurn, gameStarted, setGameStarted } = useGame() || {};
   const nextPlayerId = players[(players.indexOf(currentTurn || "") + 1) % players.length];
   const [putTile, setPutTile] = useState(false);
   const [isMyTurn, setIsMyTurn] = useState(currentTurn === playerId);
@@ -662,6 +662,19 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
     }
   };
 
+  const handleReset = async () => {
+    await supabase.from("hands").delete().eq("game_id", gameId);
+    await supabase.from("hotels").delete().eq("game_id", gameId);
+    await supabase.from("tiles").update({ placed: false, dealed: false }).eq("game_id", gameId);
+    setEstablishedHotels([]);
+    setPlacedTiles([]);
+    setPlayerHand([]);
+    setPutTile(false);
+    if (setGameStarted) {
+      setGameStarted(false);
+    }
+  };
+
   const renderedHotelList = useMemo(() => (
     <div className="mt-4 p-4 bg-white shadow rounded w-full max-w-screen-md">
       <div className="grid grid-cols-3 gap-3">
@@ -821,6 +834,10 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
               ))}
           </ul>
         </div>
+        <br />
+        <button className="w-full text-center font-bold bg-red-500 text-white" onClick={() => handleReset()}>
+          リセット
+        </button>
       </div>
     </div >
   );
