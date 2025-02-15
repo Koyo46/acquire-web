@@ -12,7 +12,10 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
   const [playerHand, setPlayerHand] = useState<number[]>([]);
   const [pendingTile, setPendingTile] = useState<{ col: number; row: string } | null>(null);
   const [confirming, setConfirming] = useState(false);
-  const { currentTurn, gameStarted, setGameStarted, endTurn } = useGame() || {};
+  const { currentTurn, endTurn, fetchGameStarted } = useGame() || {};
+  const [gameStarted, setGameStarted] = useState(false);
+
+  console.log("🔍 ゲームスタートチェック:", gameStarted);
   const nextPlayerId = players[(players.indexOf(currentTurn || "") + 1) % players.length];
   const [putTile, setPutTile] = useState(false);
   const [isMyTurn, setIsMyTurn] = useState(currentTurn === playerId);
@@ -20,6 +23,30 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
   const [placedTiles, setPlacedTiles] = useState<{ col: number; row: string }[]>([]);
   // 開発中は自由配置可能
   const [freePlacementMode, setFreePlacementMode] = useState(false);
+  useEffect(() => {
+    const fetchData = async () => {
+      if (fetchGameStarted) {
+        const isGameStarted = await fetchGameStarted(gameId);
+        setGameStarted(isGameStarted);
+      }
+    };
+    fetchData();
+
+    const channel = supabase
+      .channel("game_tables")
+      .on("postgres_changes", { event: "*", schema: "public", table: "game_tables" }, async () => {
+        if (fetchGameStarted) {
+          const isGameStarted = await fetchGameStarted(gameId);
+          console.log("🔍 ゲームスタートチェック:", isGameStarted);
+          setGameStarted(isGameStarted);
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [gameId]);
   const fetchTileKindById = async (gameId: string, tileId: number) => {
     const { data, error } = await supabase
       .from("tiles")
