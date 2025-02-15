@@ -4,7 +4,7 @@ import { supabase } from "@/src/utils/supabaseClient";
 export default function TurnManager({ gameId, playerId }: { gameId: string, playerId: string }) {
   const [gameStarted, setGameStarted] = useState(false);
   const [isMyTurn, setIsMyTurn] = useState(false);
-  const { currentTurn, endTurn, fetchGameStarted } = useGame();
+  const { currentTurn, fetchGameStarted } = useGame();
   useEffect(() => {
     const fetchData = async () => {
       const isGameStarted = await fetchGameStarted(gameId);

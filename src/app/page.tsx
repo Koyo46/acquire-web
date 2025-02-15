@@ -2,7 +2,6 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "@/src/utils/supabaseClient";
 import GameBoard from "@/src/app/components/GameBoard";
-import SelectPlayer from "./selectPlayer/page";
 import { useSearchParams } from "next/navigation";
 export default function Page() {
   const [gameId, setGameId] = useState<string | null>(null);

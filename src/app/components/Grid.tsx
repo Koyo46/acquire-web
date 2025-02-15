@@ -19,7 +19,7 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
   // 配置されたタイルのリスト
   const [placedTiles, setPlacedTiles] = useState<{ col: number; row: string }[]>([]);
   // 開発中は自由配置可能
-  const [freePlacementMode, setFreePlacementMode] = useState(true);
+  const [freePlacementMode] = useState(true);
   const fetchTileKindById = async (gameId: string, tileId: number) => {
     const { data, error } = await supabase
       .from("tiles")
@@ -160,7 +160,7 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
   }, [currentTurn]);
 
   const endTurn = async (nextPlayerId: string) => {
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from("game_tables")
       .update({ current_turn: nextPlayerId })
       .eq("id", gameId);
@@ -239,14 +239,14 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
     "雨": "bg-blue-400"
   };
 
-  const calculateJStockValue = (tileCount: number, tier: "low" | "medium" | "high") => {
-    if (tileCount <= 3) return tier === "low" ? 200 : tier === "medium" ? 300 : 400;
-    if (tileCount <= 5) return tier === "low" ? 300 : tier === "medium" ? 400 : 500;
-    if (tileCount <= 10) return tier === "low" ? 400 : tier === "medium" ? 500 : 600;
-    if (tileCount <= 20) return tier === "low" ? 500 : tier === "medium" ? 600 : 700;
-    if (tileCount <= 30) return tier === "low" ? 600 : tier === "medium" ? 700 : 800;
-    return tier === "low" ? 800 : tier === "medium" ? 1000 : 1200;
-  };
+  // const calculateJStockValue = (tileCount: number, tier: "low" | "medium" | "high") => {
+  //   if (tileCount <= 3) return tier === "low" ? 200 : tier === "medium" ? 300 : 400;
+  //   if (tileCount <= 5) return tier === "low" ? 300 : tier === "medium" ? 400 : 500;
+  //   if (tileCount <= 10) return tier === "low" ? 400 : tier === "medium" ? 500 : 600;
+  //   if (tileCount <= 20) return tier === "low" ? 500 : tier === "medium" ? 600 : 700;
+  //   if (tileCount <= 30) return tier === "low" ? 600 : tier === "medium" ? 700 : 800;
+  //   return tier === "low" ? 800 : tier === "medium" ? 1000 : 1200;
+  // };
 
   const dealTiles = async () => {
     // 空いているタイルを取得
@@ -380,7 +380,9 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
       .update({ dealed: true })
       .eq("game_id", gameId)
       .in("id", newTiles.map(tile => tile.id));
-
+    if (updateError) {
+      console.error("タイル配付エラー:", updateError);
+    }
     // Supabase に追加
     const { error: insertError } = await supabase
       .from("hands")
@@ -477,7 +479,6 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
 
   // ホテル選択モーダルの状態
   const [selectedTile, setSelectedTile] = useState<{ col: number; row: string; adjacentTiles: { col: number; row: string }[] } | null>(null);
-  const [availableHotels, setAvailableHotels] = useState(["空", "雲", "晴", "霧", "雷", "嵐", "雨"]);
   const [bornNewHotel, setBornNewHotel] = useState(false); // 新しいホテルが誕生したかどうかを保持
 
   // 隣接するタイルを取得
@@ -649,7 +650,6 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
 
     setBornNewHotel(false);
     setSelectedTile(null);
-    setAvailableHotels(prev => prev.filter(hotel => hotel !== hotelName));
   };
 
   const handleDrawAndEndTurn = async (playerId: string, nextPlayerId: string) => {
