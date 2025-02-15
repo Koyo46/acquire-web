@@ -1,13 +1,37 @@
 "use client";
+import { Suspense } from "react";
 import React, { useEffect, useState } from "react";
 import { supabase } from "@/src/utils/supabaseClient";
 import GameBoard from "@/src/app/components/GameBoard";
 import { useSearchParams } from "next/navigation";
+
 export default function Page() {
   const [gameId, setGameId] = useState<string | null>(null);
   const [players, setPlayers] = useState<string[]>([]);
+  const [playerId, setPlayerId] = useState<string | null>(null);
+
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <PageContent setGameId={setGameId} setPlayers={setPlayers} setPlayerId={setPlayerId} />
+      {gameId && playerId && (
+        <GameBoard gameId={gameId} playerId={playerId} players={players} />
+      )}
+    </Suspense>
+  );
+}
+
+function PageContent({
+  setGameId,
+  setPlayers,
+  setPlayerId,
+}: {
+  setGameId: React.Dispatch<React.SetStateAction<string | null>>;
+  setPlayers: React.Dispatch<React.SetStateAction<string[]>>;
+  setPlayerId: React.Dispatch<React.SetStateAction<string | null>>;
+}) {
   const searchParams = useSearchParams();
   const playerId = searchParams.get("playerId");
+
   useEffect(() => {
     const fetchGameData = async () => {
       // 進行中のゲームを取得
@@ -22,7 +46,6 @@ export default function Page() {
       }
 
       setGameId(gameData.id);
-
 
       const fetchGamePlayers = async (gameId: string) => {
         const { data, error } = await supabase
@@ -43,13 +66,11 @@ export default function Page() {
     };
 
     fetchGameData();
-  }, []);
+  }, [setGameId, setPlayers]);
 
-  return (
-    <div>
-      {gameId && playerId && (
-        <GameBoard gameId={gameId} playerId={playerId} players={players} />
-      )}
-    </div>
-  );
+  useEffect(() => {
+    setPlayerId(playerId);
+  }, [playerId, setPlayerId]);
+
+  return null;
 }

@@ -1,3 +1,4 @@
+"use client";
 import React, { useEffect, useState } from "react";
 import { useGame } from "@/src/app/contexts/GameContext";
 import { supabase } from "@/src/utils/supabaseClient";
