@@ -12,7 +12,7 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
   const [playerHand, setPlayerHand] = useState<number[]>([]);
   const [pendingTile, setPendingTile] = useState<{ col: number; row: string } | null>(null);
   const [confirming, setConfirming] = useState(false);
-  const { currentTurn, gameStarted, setGameStarted } = useGame() || {};
+  const { currentTurn, gameStarted, setGameStarted, endTurn } = useGame() || {};
   const nextPlayerId = players[(players.indexOf(currentTurn || "") + 1) % players.length];
   const [putTile, setPutTile] = useState(false);
   const [isMyTurn, setIsMyTurn] = useState(currentTurn === playerId);
@@ -159,14 +159,6 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
     };
   }, [currentTurn]);
 
-  const endTurn = async (nextPlayerId: string) => {
-    const { error } = await supabase
-      .from("game_tables")
-      .update({ current_turn: nextPlayerId })
-      .eq("id", gameId);
-    if (error) console.error("ターン更新エラー:", error);
-  };
-
   useEffect(() => {
     if (!gameId) return;
 
@@ -294,6 +286,9 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
           console.error("タイル配付エラー:", updateError);
         }
       }
+    }
+    if (endTurn) {
+      await endTurn(nextPlayerId);
     }
     await supabase.from("game_tables").update({ status: "started" }).eq("id", gameId);
   };
