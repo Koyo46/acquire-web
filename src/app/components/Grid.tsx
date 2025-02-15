@@ -650,7 +650,9 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
   const handleDrawAndEndTurn = async (playerId: string, nextPlayerId: string) => {
     try {
       await drawTilesUntil6(playerId); // タイル補充
-      await endTurn(nextPlayerId); // ターンエンド
+      if (endTurn) {
+        await endTurn(nextPlayerId); // ターンエンド
+      }
       setIsMyTurn(false);
     } catch (error) {
       console.error("タイル補充 & ターンエンドエラー:", error);
