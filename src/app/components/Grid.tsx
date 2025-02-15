@@ -1,7 +1,7 @@
 "use client";
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/src/utils/supabaseClient";
-import { tileKindToPosition, positionToTileKind, tileIdToPosition } from "@/src/utils/tileUtils";
+import { tileKindToPosition, positionToTileKind, tileIdToPosition, positionToTileId } from "@/src/utils/tileUtils";
 import { fetchGameStarted } from "@/src/hooks/useGame";
 export default function Grid({ gameId, playerId, players }: { gameId: string, playerId: string, players: string[] }) {
 
@@ -73,7 +73,8 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
   useEffect(() => {
     const fetchData = async () => {
       const tiles = await fetchTilesStatus();
-      const positions = await Promise.all(tiles.map(async tile => {
+      const placedTiles = tiles.filter(tile => tile.placed === true);
+      const positions = await Promise.all(placedTiles.map(async tile => {
         const position = await tileIdToPosition(tile.id, gameId);
         if (position) {
           const { col, row } = position;
@@ -155,38 +156,6 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
 
   useEffect(() => {
     if (!gameId) return;
-    const fetchData = async () => {
-      const tiles = await fetchTilesStatus();
-      // tile_kindを取得
-      const tilesWithKind = await Promise.all(tiles.map(async tile => {
-        const tileKind = await fetchTileKindById(gameId, tile.id);
-        return {
-          ...tile,
-          tile_kind: tileKind
-        };
-      }));
-
-      setPlacedTiles(tilesWithKind.filter(tile => tile.placed).map(tile => {
-        const { col, row } = tileKindToPosition(tile.tile_kind);
-        return { col, row };
-      }));
-    };
-    fetchData();
-
-    const channel = supabase
-      .channel("tiles")
-      .on("postgres_changes", { event: "*", schema: "public", table: "tiles" }, async () => {
-        fetchData();
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [gameId]);
-
-  useEffect(() => {
-    if (!gameId) return;
     const fetchTurn = async () => {
       const { data, error } = await supabase
         .from("game_tables")
@@ -198,7 +167,6 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
         console.error("ターン取得エラー:", error);
       } else {
         setCurrentTurn(data.current_turn);
-        console.log("currentTurn", data.current_turn);
         if (data.current_turn === playerId) {
           setIsMyTurn(true);
         }
@@ -207,12 +175,9 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
 
     fetchTurn();
 
-    console.log("🟢 useTurn: Realtime チャンネルを設定");
-
     const channel = supabase
       .channel(`game_tables`) // 一意のチャンネル名に変更
       .on("postgres_changes", { event: "*", schema: "public", table: "game_tables" }, (payload) => {
-        console.log("✅ Realtime 更新検知:", payload);
         fetchTurn();
       })
       .subscribe();
