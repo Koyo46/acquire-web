@@ -512,7 +512,8 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
       const tileIdPromises = hotel.tiles.map(t => positionToTileId(t.col, t.row, gameId));
       const resolvedTileIds = await Promise.all(tileIdPromises);
       const resolvedNewTileId = await positionToTileId(newTile.col, newTile.row, gameId);
-      const updatedTileIds = [...new Set(resolvedTileIds.concat(resolvedNewTileId))];
+      const adjacentTileIds = await Promise.all(adjacentPlacedTiles.map(tile => positionToTileId(tile.col, tile.row, gameId)));
+      const updatedTileIds = [...new Set(resolvedTileIds.concat(resolvedNewTileId, adjacentTileIds))];
       console.log(updatedTileIds);
       // Supabase の `hotels` テーブルを更新
       const { error } = await supabase
