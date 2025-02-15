@@ -20,6 +20,7 @@ export default function TurnManager({ gameId, playerId }: { gameId: string, play
       .on("postgres_changes", { event: "*", schema: "public", table: "game_tables" }, async () => {
         if (fetchGameStarted) {
           const isGameStarted = await fetchGameStarted(gameId);
+          console.log("🔍 ゲームスタートチェック:", isGameStarted);
           setGameStarted(isGameStarted);
         }
       })

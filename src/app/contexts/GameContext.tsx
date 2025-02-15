@@ -65,6 +65,7 @@ export const GameProvider = ({ gameId, children }: { gameId: string, children: R
       .select("status")
       .eq("id", gameId)
       .single();
+    console.log("🔍 ゲームスタートチェック:", data);
     if (data?.status === "started") {
       return true;
     }
