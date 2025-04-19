@@ -8,6 +8,12 @@ interface GameContextType {
   fetchGameStarted: (gameId: string) => Promise<boolean>;
   gameStarted: boolean;
   setGameStarted: (gameStarted: boolean) => void;
+  currentMergingHotel: any | null;
+  setCurrentMergingHotel: React.Dispatch<React.SetStateAction<any | null>>;
+  preMergeHotelData: any[];
+  setPreMergeHotelData: React.Dispatch<React.SetStateAction<any[]>>;
+  mergingHotels: any[];
+  setMergingHotels: React.Dispatch<React.SetStateAction<any[]>>;
 }
 
 const GameContext = createContext<GameContextType | null>(null);
@@ -15,6 +21,9 @@ const GameContext = createContext<GameContextType | null>(null);
 export const GameProvider = ({ gameId, children }: { gameId: string, children: ReactNode }) => {
   const [currentTurn, setCurrentTurn] = useState<string | null>(null);
   const [gameStarted, setGameStarted] = useState(false);
+  const [currentMergingHotel, setCurrentMergingHotel] = useState<any | null>(null);
+  const [preMergeHotelData, setPreMergeHotelData] = useState<any[]>([]);
+  const [mergingHotels, setMergingHotels] = useState<any[]>([]);
 
   useEffect(() => {
     if (!gameId) return;
@@ -65,7 +74,6 @@ export const GameProvider = ({ gameId, children }: { gameId: string, children: R
       .select("status")
       .eq("id", gameId)
       .single();
-    console.log("🔍 ゲームスタートチェック:", data);
     if (data?.status === "started") {
       return true;
     }
@@ -73,7 +81,7 @@ export const GameProvider = ({ gameId, children }: { gameId: string, children: R
   };
 
   return (
-    <GameContext.Provider value={{ currentTurn, endTurn, fetchGameStarted, gameStarted, setGameStarted }}>
+    <GameContext.Provider value={{ currentTurn, endTurn, fetchGameStarted, gameStarted, setGameStarted, currentMergingHotel, setCurrentMergingHotel, preMergeHotelData, setPreMergeHotelData, mergingHotels, setMergingHotels }}>
       {children}
     </GameContext.Provider>
   );

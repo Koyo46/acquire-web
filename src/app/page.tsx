@@ -4,7 +4,7 @@ import React, { useEffect, useState } from "react";
 import { supabase } from "@/src/utils/supabaseClient";
 import GameBoard from "@/src/app/components/GameBoard";
 import { useSearchParams } from "next/navigation";
-
+import { GameProvider } from "@/src/app/contexts/GameContext";
 export default function Page() {
   const [gameId, setGameId] = useState<string | null>(null);
   const [players, setPlayers] = useState<string[]>([]);
@@ -12,10 +12,12 @@ export default function Page() {
 
   return (
     <Suspense fallback={<div>Loading...</div>}>
-      <PageContent setGameId={setGameId} setPlayers={setPlayers} setPlayerId={setPlayerId} />
-      {gameId && playerId && (
-        <GameBoard gameId={gameId} playerId={playerId} players={players} />
-      )}
+      <GameProvider gameId={gameId!}>
+        <PageContent setGameId={setGameId} setPlayers={setPlayers} setPlayerId={setPlayerId} />
+        {gameId && playerId && (
+          <GameBoard gameId={gameId} playerId={playerId} players={players} />
+        )}
+      </GameProvider>
     </Suspense>
   );
 }
