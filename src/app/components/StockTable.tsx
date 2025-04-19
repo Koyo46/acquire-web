@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "@/src/utils/supabaseClient";
 import { caluculateStockPrice } from "@/src/utils/hotelStockBoard";
+import { calculateTopInvestors } from "@/src/utils/calculateTopInvestors";
+
 const hotelImages: { [key: string]: string } = {
   "空": "/images/sky.jpg",
   "雲": "/images/cloud.png",
@@ -21,44 +23,44 @@ const hotelColors: { [key: string]: string } = {
   "雨": "bg-blue-400"
 };
 
-const StockTable = ({ gameId }: { gameId: string }) => {
+export default function StockTable({ gameId, players }: { gameId: string, players: string[] }) {
   const [hotels, setHotels] = useState<any[]>([]);
   const [hotelInvestors, setHotelInvestors] = useState<any[]>([]);
 
-  const fetchHotels = async (gameId: string) => {
-    const { data, error } = await supabase
-      .from("hotels")
-      .select("*")
-      .eq("game_id", gameId);
-    if (error) console.error("ホテル取得エラー:", error);
-    const hotels = data?.map(hotel => ({
-      ...hotel,
-      size: hotel.tileIds ? hotel.tileIds.length : 0,
-      stockPrice: hotel.stock_price
-    }));
-    return hotels || [];
-  };
-
-  const fetchHotelInvestors = async (gameId: string) => {
-    const { data, error } = await supabase
-      .from("hotel_investors")
-      .select(`
-        *,
-        users (
-          username
-        )
-      `)
-      .eq("game_id", gameId);
-    if (error) console.error("ホテル投資家取得エラー:", error);
-    console.log(data);
-    const hotelInvestors = data?.map(investor => ({
-      ...investor,
-      user_name: investor.users.username
-    }));
-    return hotelInvestors || [];
-  };
 
   useEffect(() => {
+    const fetchHotels = async (gameId: string) => {
+      const { data, error } = await supabase
+        .from("hotels")
+        .select("*")
+        .eq("game_id", gameId);
+      if (error) console.error("ホテル取得エラー:", error);
+      const hotels = data?.map(hotel => ({
+        ...hotel,
+        size: hotel.tileIds ? hotel.tileIds.length : 0,
+        stockPrice: hotel.stock_price
+      }));
+      return hotels || [];
+    };
+
+    const fetchHotelInvestors = async (gameId: string) => {
+      const { data, error } = await supabase
+        .from("hotel_investors")
+        .select(`
+          *,
+          users (
+            username
+          )
+        `)
+        .eq("game_id", gameId);
+      if (error) console.error("ホテル投資家取得エラー:", error);
+      const hotelInvestors = data?.map(investor => ({
+        ...investor,
+        user_name: investor.users.username
+      }));
+      return hotelInvestors || [];
+    };
+
     const fetchData = async () => {
       const fetchedHotels = await fetchHotels(gameId);
       setHotels(fetchedHotels);
@@ -69,29 +71,15 @@ const StockTable = ({ gameId }: { gameId: string }) => {
 
     const channel = supabase
       .channel("hotel_investors")
-      .on("postgres_changes", { event: "*", schema: "public", table: "hotel_investors" }, async () => {
-        const fetchedHotelInvestors = await fetchHotelInvestors(gameId);
-        setHotelInvestors(fetchedHotelInvestors);
-        const fetchedHotels = await fetchHotels(gameId);
-        setHotels(fetchedHotels);
-      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "hotel_investors" }, fetchData)
+      .on("postgres_changes", { event: "*", schema: "public", table: "hotels" }, fetchData)
+      .on("postgres_changes", { event: "*", schema: "public", table: "tiles" }, fetchData)
       .subscribe();
 
-
-    const channel2 = supabase
-      .channel("hotels")
-      .on("postgres_changes", { event: "*", schema: "public", table: "hotels" }, async () => {
-        const fetchedHotelInvestors = await fetchHotelInvestors(gameId);
-        setHotelInvestors(fetchedHotelInvestors);
-        const fetchedHotels = await fetchHotels(gameId);
-        setHotels(fetchedHotels);
-      })
-      .subscribe();
     return () => {
       supabase.removeChannel(channel);
-      supabase.removeChannel(channel2);
     };
-  }, [gameId]);
+  }, [gameId, players]);
 
   return (
     <div className="p-4">
@@ -109,10 +97,7 @@ const StockTable = ({ gameId }: { gameId: string }) => {
         </thead>
         <tbody>
           {hotels.map((hotel, index) => {
-            const investors = hotelInvestors.filter(investor => investor.hotel_name === hotel.hotel_name);
-            const sortedInvestors = investors.sort((a, b) => b.shares - a.shares);
-            const topInvestor = sortedInvestors[0] || {};
-            const secondInvestor = sortedInvestors[1] || {};
+            const { topInvestor, secondInvestor } = calculateTopInvestors(hotelInvestors, hotel.hotel_name);
             return (
               <tr key={index} className={`border border-gray-300 ${hotelColors[hotel.hotel_name]}`}>
                 <td className="border border-gray-300 p-2 flex items-center">
@@ -133,5 +118,3 @@ const StockTable = ({ gameId }: { gameId: string }) => {
     </div>
   );
 };
-
-export default StockTable;
