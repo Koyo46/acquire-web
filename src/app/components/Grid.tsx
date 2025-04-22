@@ -863,12 +863,17 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
         return;
       }
 
-      const formattedHotels = await Promise.all(data.map(async hotel => ({
-        id: hotel.id,
-        name: hotel.hotel_name,
-        tiles: await Promise.all(hotel.tile_ids.map((tileId: string) => tileIdToPosition(tileId, gameId))),
-        home: (await tileIdToPosition(hotel.hotel_home_tile_id, gameId)) || { col: 0, row: "" }
-      })));
+      const formattedHotels = await Promise.all(data.map(async hotel => {
+        const tiles = await Promise.all(hotel.tile_ids.map((tileId: string) => tileIdToPosition(tileId, gameId)));
+        const home = (await tileIdToPosition(hotel.hotel_home_tile_id, gameId)) || { col: 0, row: "" };
+        
+        return {
+          id: hotel.id,
+          name: hotel.hotel_name,
+          tiles: tiles.filter(tile => tile !== null) as { col: number; row: string }[],
+          home
+        };
+      }));
 
       setEstablishedHotels(formattedHotels);
     };
@@ -881,7 +886,56 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
       .channel("hotels_changes")
       .on("postgres_changes", 
         { event: "*", schema: "public", table: "hotels", filter: `game_id=eq.${gameId}` }, 
-        fetchHotels
+        async (payload) => {
+          console.log("ホテル情報が更新されました:", payload);
+          await fetchHotels();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [gameId]);
+
+  // タイルの配置を監視
+  useEffect(() => {
+    if (!gameId) return;
+
+    const fetchHotels = async () => {
+      const { data, error } = await supabase
+        .from("hotels")
+        .select("id, hotel_name, tile_ids, hotel_home_tile_id")
+        .eq("game_id", gameId);
+
+      if (error) {
+        console.error("ホテル情報取得エラー:", error);
+        return;
+      }
+
+      const formattedHotels = await Promise.all(data.map(async hotel => {
+        const tiles = await Promise.all(hotel.tile_ids.map((tileId: string) => tileIdToPosition(tileId, gameId)));
+        const home = (await tileIdToPosition(hotel.hotel_home_tile_id, gameId)) || { col: 0, row: "" };
+        
+        return {
+          id: hotel.id,
+          name: hotel.hotel_name,
+          tiles: tiles.filter(tile => tile !== null) as { col: number; row: string }[],
+          home
+        };
+      }));
+
+      setEstablishedHotels(formattedHotels);
+    };
+
+    const channel = supabase
+      .channel("tiles_changes")
+      .on("postgres_changes", 
+        { event: "*", schema: "public", table: "tiles", filter: `game_id=eq.${gameId}` }, 
+        async (payload) => {
+          console.log("タイル情報が更新されました:", payload);
+          await fetchHotels();
+        }
       )
       .subscribe();
 
