@@ -1,6 +1,6 @@
 "use client";
-import { supabase } from "@/src/utils/supabaseClient";
-import { useEffect, useState } from "react";
+import { useStockStore } from "@/src/store/stockStore";
+
 const hotelColors: { [key: string]: string } = {
   "空": "bg-orange-400",
   "雲": "bg-purple-400",
@@ -10,75 +10,9 @@ const hotelColors: { [key: string]: string } = {
   "嵐": "bg-red-400",
   "雨": "bg-blue-400"
 };
-export default function PlayerStatus({ gameId, players }: { gameId: string, players: string[] }) {
-  type PlayerStatus = {
-    id: string;
-    username: string;
-    balance: number;
-    stocks: { [key: string]: number };
-  };
 
-  const [playerStatuses, setPlayerStatuses] = useState<PlayerStatus[]>([]);
-
-  useEffect(() => {
-    const fetchPlayerStatuses = async () => {
-      // 各プレイヤーの残高を取得
-      const { data: balances, error: balanceError } = await supabase
-        .from("users")
-        .select("id, username, balance")
-        .in("id", players);
-
-      if (balanceError) {
-        console.error("残高取得エラー:", balanceError);
-        return;
-      }
-
-      // 各プレイヤーの株券を取得
-      const { data: stocks, error: stockError } = await supabase
-        .from("hotel_investors")
-        .select("user_id, hotel_name, shares")
-        .eq("game_id", gameId)
-        .in("user_id", players);
-
-      if (stockError) {
-        console.error("株券取得エラー:", stockError);
-        return;
-      }
-
-      // データを整形
-      const statuses = balances.map(balance => {
-        const playerStocks = stocks
-          .filter(stock => stock.user_id === balance.id)
-          .reduce((acc, stock) => {
-            acc[stock.hotel_name] = stock.shares;
-            return acc;
-          }, {} as { [key: string]: number });
-
-        return {
-          id: balance.id,
-          username: balance.username,
-          balance: balance.balance,
-          stocks: playerStocks
-        };
-      });
-
-      setPlayerStatuses(statuses);
-    };
-
-    fetchPlayerStatuses();
-
-    // リアルタイム更新のサブスクリプション
-    const channel = supabase
-      .channel("player-status")
-      .on("postgres_changes", { event: "*", schema: "public", table: "users" }, fetchPlayerStatuses)
-      .on("postgres_changes", { event: "*", schema: "public", table: "hotel_investors" }, fetchPlayerStatuses)
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [gameId, players]);
-
+export default function PlayerStatus() {
+  const playerStatuses = useStockStore((state) => state.playerStatuses);
   const allHotels = ["空", "雲", "晴", "霧", "雷", "嵐", "雨"];
 
   return (
