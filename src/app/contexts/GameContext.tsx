@@ -46,7 +46,7 @@ export const GameProvider = ({ gameId, children }: { gameId: string, children: R
 
     const channel = supabase
       .channel(`game_tables_${gameId}`)
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "game_tables" }, (payload) => {
+      .on("postgres_changes", { event: "*", schema: "public", table: "game_tables" }, (payload) => {
         console.log("✅ Realtime 更新検知:", payload);
         setCurrentTurn(payload.new.current_turn);
       })
