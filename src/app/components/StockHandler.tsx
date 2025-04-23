@@ -1,6 +1,13 @@
 import { useGame } from "@/src/app/contexts/GameContext";
-import { caluculateStockPrice } from "@/src/utils/hotelStockBoard";
+import { calculateStockPrice } from "@/src/utils/hotelStockBoard";
 import { supabase } from "@/src/utils/supabaseClient";
+import { useState, useEffect } from "react";
+
+interface Hotel {
+  id: string;
+  name: string;
+  tileCount: number;
+}
 
 export default function StockHandler({ gameId, playerId, players }: { gameId: string, playerId: string, players: string[] }) {
   const {
@@ -14,6 +21,51 @@ export default function StockHandler({ gameId, playerId, players }: { gameId: st
     currentMergingPlayer,
     setCurrentMergingPlayer
   } = useGame() || {};
+
+  const [isShareholder, setIsShareholder] = useState(false);
+  const [shares, setShares] = useState(0);
+  const isCurrentPlayer = currentMergingPlayer === playerId;
+
+  useEffect(() => {
+    const checkShareholder = async () => {
+      if (!currentMergingHotel) return;
+      
+      const { data: shareholderData } = await supabase
+        .from("hotel_investors")
+        .select("shares")
+        .eq("hotel_name", currentMergingHotel.name)
+        .eq("user_id", playerId)
+        .eq("game_id", gameId)
+        .single();
+
+      setIsShareholder(!!shareholderData);
+      setShares(shareholderData?.shares || 0);
+    };
+
+    checkShareholder();
+
+    // マージ状態の変更を監視
+    const channel = supabase
+      .channel("merging_state")
+      .on("postgres_changes", 
+        { event: "*", schema: "public", table: "game_tables", filter: `id=eq.${gameId}` }, 
+        async () => {
+          // マージ状態が変更されたら株主情報を再取得
+          await checkShareholder();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentMergingHotel, gameId, playerId]);
+
+  // マージ中のホテルがなければ表示しない
+  if (!mergingHotels || mergingHotels.length === 0) return null;
+
+  // 株主でない場合は表示しない
+  if (!isShareholder) return null;
 
   const handleMergeComplete = async () => {
     if (!mergingPlayersQueue || !currentMergingPlayer || !setMergingPlayersQueue || !setCurrentMergingPlayer) return;
@@ -39,7 +91,7 @@ export default function StockHandler({ gameId, playerId, players }: { gameId: st
       if (remainingHotels.length > 0) {
         const { data: shareholders } = await supabase
           .from("hotel_investors")
-          .select("user_id")
+          .select("user_id, shares")
           .eq("hotel_name", remainingHotels[0].name)
           .eq("game_id", gameId);
 
@@ -54,21 +106,17 @@ export default function StockHandler({ gameId, playerId, players }: { gameId: st
     }
   };
 
-  // 現在のプレイヤーの順番でない場合は表示しない
-  if (currentMergingPlayer !== playerId) return null;
-
-  const sellShares = (hotel: any) => {
+  const sellShares = (hotel: Hotel) => {
     console.log(hotel);
     handleMergeComplete();
   }
 
-  const keepShares = (hotel: any) => {
+  const keepShares = (hotel: Hotel) => {
     console.log(hotel);
     handleMergeComplete();
-
   }
 
-  const exchangeShares = (hotel: any) => {
+  const exchangeShares = (hotel: Hotel) => {
     console.log(hotel);
     handleMergeComplete();
   }
@@ -78,18 +126,47 @@ export default function StockHandler({ gameId, playerId, players }: { gameId: st
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center pt-80">
         <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
           <h3 className="text-lg font-bold mb-4">買収される{currentMergingHotel.name}の株をどうしますか？</h3>
-          {/* マージ前のタイル数を表示 */}
+          <p>保有株数: {shares}株</p>
           <p>マージ前のタイル数: {preMergeHotelData?.find(hotel => hotel.id === currentMergingHotel.id)?.tileCount}</p>
-          現在の株価：{caluculateStockPrice(currentMergingHotel.name, preMergeHotelData?.find(hotel => hotel.id === currentMergingHotel.id)?.tileCount)}
+          <p>現在の株価：{calculateStockPrice(currentMergingHotel.name, preMergeHotelData?.find(hotel => hotel.id === currentMergingHotel.id)?.tileCount)}</p>
+          <div className="mt-4">
+            <p className="text-sm text-gray-600 mb-2">
+              {isCurrentPlayer ? "あなたの番です" : `${currentMergingPlayer}の番です`}
+            </p>
+          </div>
           <div className="flex gap-4 justify-end">
-            <button className="px-6 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors" onClick={() => sellShares(currentMergingHotel)}>
+            <button 
+              className={`px-6 py-2 rounded transition-colors ${
+                isCurrentPlayer 
+                  ? "bg-green-500 text-white hover:bg-green-600" 
+                  : "bg-gray-300 text-gray-500 cursor-not-allowed"
+              }`} 
+              onClick={() => sellShares(currentMergingHotel)}
+              disabled={!isCurrentPlayer}
+            >
               売却する
             </button>
-            <button className="px-6 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition-colors" onClick={() => keepShares(currentMergingHotel)}>
+            <button 
+              className={`px-6 py-2 rounded transition-colors ${
+                isCurrentPlayer 
+                  ? "bg-blue-500 text-white hover:bg-blue-600" 
+                  : "bg-gray-300 text-gray-500 cursor-not-allowed"
+              }`}
+              onClick={() => keepShares(currentMergingHotel)}
+              disabled={!isCurrentPlayer}
+            >
               保持する
             </button>
-            <button className="px-6 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition-colors" onClick={() => exchangeShares(currentMergingHotel)}>
-              持っている株を買収先の株と2:1で交換する
+            <button 
+              className={`px-6 py-2 rounded transition-colors ${
+                isCurrentPlayer 
+                  ? "bg-purple-500 text-white hover:bg-purple-600" 
+                  : "bg-gray-300 text-gray-500 cursor-not-allowed"
+              }`}
+              onClick={() => exchangeShares(currentMergingHotel)}
+              disabled={!isCurrentPlayer}
+            >
+              2:1で交換
             </button>
           </div>
         </div>

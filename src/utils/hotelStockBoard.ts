@@ -6,12 +6,11 @@ export const getStockPriceByHotelName=async(hotelName:string)=>{
     console.error("ホテルデータ取得エラー:", error);
     return 0;
   }
-  return caluculateStockPrice(hotelName, data.tile_ids.length);
+  return calculateStockPrice(hotelName, data.tile_ids.length);
 }
 
-export const caluculateStockPrice = (hotelName: string, tileCount: number) => {
+export const calculateStockPrice = (hotelName: string, tileCount: number) => {
   let stockPrice: number=0;
-  let dividend: number=0;
   if (hotelName === "空"||hotelName === "雲") { 
     if (tileCount === 2) {
       stockPrice = 200;

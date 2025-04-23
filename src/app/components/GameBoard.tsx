@@ -7,8 +7,11 @@ import StockHandler from "./StockHandler";
 import { useGame } from "@/src/app/contexts/GameContext";
 import { useEffect } from "react";
 import { useStockStore } from "@/src/store/stockStore";
-// import HotelList from "./HotelList";
-// import PlayerHand from "./PlayerHand";
+
+type Player = {
+  id: string;
+  username: string;
+};
 
 export default function GameBoard({ gameId, playerId, players }: { gameId: string, playerId: string, players: string[] }) {
   const { mergingHotels } = useGame() || {};
@@ -22,15 +25,23 @@ export default function GameBoard({ gameId, playerId, players }: { gameId: strin
 
   useEffect(() => {
     const initializeData = async () => {
-      if (!isInitialized) {
-        await updateAll(gameId, players);
+      if (!isInitialized && players.length > 0) {
+        const playerObjects: Player[] = players.map(id => ({
+          id,
+          username: `プレイヤー${id}`
+        }));
+        await updateAll(gameId, playerObjects);
       }
     };
     initializeData();
   }, [gameId, players, isInitialized, updateAll]);
 
   useEffect(() => {
-    const unsubscribe = subscribeToChanges(gameId, players);
+    const playerObjects: Player[] = players.map(id => ({
+      id,
+      username: `プレイヤー${id}`
+    }));
+    const unsubscribe = subscribeToChanges(gameId, playerObjects);
     return () => {
       if (unsubscribe) unsubscribe();
     };

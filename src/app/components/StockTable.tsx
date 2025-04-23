@@ -51,9 +51,9 @@ export default function StockTable() {
                 </td>
                 <td className="border border-gray-300 p-2">{hotel.size}</td>
                 <td className="border border-gray-300 p-2">${hotel.stockPrice}</td>
-                <td className="border border-gray-300 p-2">{topInvestor.user_name || "なし"}</td>
+                <td className="border border-gray-300 p-2">{topInvestor.users?.username || "なし"}</td>
                 <td className="border border-gray-300 p-2">{topInvestor.shares || 0}株</td>
-                <td className="border border-gray-300 p-2">{secondInvestor.user_name || "なし"}</td>
+                <td className="border border-gray-300 p-2">{secondInvestor.users?.username || "なし"}</td>
                 <td className="border border-gray-300 p-2">{secondInvestor.shares || 0}株</td>
               </tr>
             );

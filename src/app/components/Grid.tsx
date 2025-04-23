@@ -359,10 +359,8 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
   // ホテル選択モーダルの状態
   const [selectedTile, setSelectedTile] = useState<{ col: number; row: string; adjacentTiles: { col: number; row: string }[] } | null>(null);
   const [bornNewHotel, setBornNewHotel] = useState(false); // 新しいホテルが誕生したかどうかを保持
-  const { setMergingHotels } = gameContext || {};
+  const { setMergingHotels, setPreMergeHotelData, setCurrentMergingHotel } = gameContext || {};
   const [smallHotels, setSmallHotels] = useState<{ id: number; name: string; tiles: { col: number; row: string }[] }[]>([]);
-  const { setPreMergeHotelData } = gameContext || {};
-  const { setCurrentMergingHotel } = gameContext || {};
   const handleMerge = useCallback(async (hotelsToMerge: { id: number; name: string; tiles: { col: number; row: string }[] }[]) => {
     if (hotelsToMerge.length === 0) return;
     
@@ -372,7 +370,7 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
     const mergedHotelNames = hotelsToMerge.map(hotel => hotel.name);
     const { data: shareholders, error } = await supabase
       .from("hotel_investors")
-      .select("user_id")
+      .select("user_id, shares")
       .in("hotel_name", mergedHotelNames)
       .eq("game_id", gameId);
 
