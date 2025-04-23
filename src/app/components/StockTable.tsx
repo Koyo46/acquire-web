@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { calculateTopInvestors } from "@/src/utils/calculateTopInvestors";
 import { useStockStore } from "@/src/store/stockStore";
 
@@ -25,7 +25,25 @@ const hotelColors: { [key: string]: string } = {
 export default function StockTable() {
   const hotels = useStockStore((state) => state.hotels);
   const hotelInvestors = useStockStore((state) => state.hotelInvestors);
-
+  const totalStockCount = 25;
+  
+  // 各ホテルの総株数を計算
+  const hotelShares = useMemo(() => {
+    const shares: { [key: string]: number } = {};
+    
+    // 初期化 - すべてのホテルの株数を0に設定
+    hotels.forEach(hotel => {
+      shares[hotel.name] = 0;
+    });
+    
+    // 各ホテルの株数を集計
+    hotelInvestors.forEach(investor => {
+      shares[investor.hotel_name] = (shares[investor.hotel_name] || 0) + investor.shares;
+    });
+    
+    return shares;
+  }, [hotels, hotelInvestors]);
+  
   return (
     <div className="p-4">
       <table className="w-full border-collapse border border-gray-300 text-left">
@@ -38,6 +56,7 @@ export default function StockTable() {
             <th className="border border-gray-300 p-2">保有株数</th>
             <th className="border border-gray-300 p-2">第二株主</th>
             <th className="border border-gray-300 p-2">保有株数</th>
+            <th className="border border-gray-300 p-2">残り株数</th>
           </tr>
         </thead>
         <tbody>
@@ -55,6 +74,7 @@ export default function StockTable() {
                 <td className="border border-gray-300 p-2">{topInvestor.shares || 0}株</td>
                 <td className="border border-gray-300 p-2">{secondInvestor.users?.username || "なし"}</td>
                 <td className="border border-gray-300 p-2">{secondInvestor.shares || 0}株</td>
+                <td className="border border-gray-300 p-2">{totalStockCount - (hotelShares[hotel.name] || 0)}株</td>
               </tr>
             );
           })}
