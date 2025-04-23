@@ -9,6 +9,15 @@ interface Hotel {
   tileCount: number;
 }
 
+interface MergeState {
+  merging_hotels?: Hotel[];
+  pre_merge_hotel_data?: Hotel[];
+  players_queue?: string[];
+  current_player?: string | null;
+  current_merging_hotel?: Hotel | null;
+  is_merging?: boolean;
+}
+
 interface GameContextType {
   currentTurn: string | null;
   endTurn: (nextPlayerId: string) => Promise<void>;
@@ -25,6 +34,19 @@ interface GameContextType {
   setMergingPlayersQueue: React.Dispatch<React.SetStateAction<string[]>>;
   currentMergingPlayer: string | null;
   setCurrentMergingPlayer: React.Dispatch<React.SetStateAction<string | null>>;
+}
+
+interface PostgresChangePayload {
+  new: {
+    current_turn?: string;
+    status?: string;
+    merge_state?: MergeState;
+  };
+  old: {
+    current_turn?: string;
+    status?: string;
+    merge_state?: MergeState;
+  };
 }
 
 const GameContext = createContext<GameContextType | null>(null);
@@ -59,7 +81,7 @@ export const GameProvider = ({ gameId, children }: { gameId: string, children: R
 
     const channel = supabase
       .channel(`game_tables_${gameId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "game_tables" }, (payload: any) => {
+      .on("postgres_changes", { event: "*", schema: "public", table: "game_tables" }, (payload: PostgresChangePayload) => {
         console.log("✅ Realtime 更新検知:", payload);
         if (payload.new && payload.new.current_turn) {
           setCurrentTurn(payload.new.current_turn);

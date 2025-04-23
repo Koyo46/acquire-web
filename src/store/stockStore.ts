@@ -44,8 +44,6 @@ type StockState = {
   subscribeToChanges: (gameId: string, players: Player[]) => () => void;
 };
 
-type SetState = (fn: (state: StockState) => Partial<StockState>) => void;
-type GetState = () => StockState;
 
 export const useStockStore = create<StockState>((set, get) => ({
   hotels: [],
