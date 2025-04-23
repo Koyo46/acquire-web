@@ -19,7 +19,8 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
   const [pendingTile, setPendingTile] = useState<{ col: number; row: string } | null>(null);
   const [confirming, setConfirming] = useState(false);
   const gameContext = useGame();
-  const { currentTurn, endTurn, fetchGameStarted, setMergingPlayersQueue, setCurrentMergingPlayer } = gameContext || {};
+  const { currentTurn, endTurn, fetchGameStarted } = gameContext || {};
+  const { setMergingHotels, setPreMergeHotelData, setCurrentMergingHotel, setMergingPlayersQueue, setCurrentMergingPlayer } = gameContext || {};
   const [gameStarted, setGameStarted] = useState(false);
   const nextPlayerId = players[(players.indexOf(currentTurn || "") + 1) % players.length];
   const [putTile, setPutTile] = useState(false);
@@ -359,7 +360,6 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
   // ホテル選択モーダルの状態
   const [selectedTile, setSelectedTile] = useState<{ col: number; row: string; adjacentTiles: { col: number; row: string }[] } | null>(null);
   const [bornNewHotel, setBornNewHotel] = useState(false); // 新しいホテルが誕生したかどうかを保持
-  const { setMergingHotels, setPreMergeHotelData, setCurrentMergingHotel } = gameContext || {};
   const [smallHotels, setSmallHotels] = useState<{ id: number; name: string; tiles: { col: number; row: string }[] }[]>([]);
   const handleMerge = useCallback(async (hotelsToMerge: { id: number; name: string; tiles: { col: number; row: string }[] }[]) => {
     if (hotelsToMerge.length === 0) return;
@@ -380,34 +380,79 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
     }
 
     // 重複を除去して株主のリストを作成
-    const uniqueShareholders = [...new Set(shareholders.map(s => s.user_id))];
+    const uniqueShareholders = [...new Set(shareholders?.map(s => s.user_id) || [])];
     
     // プレイヤーの順番に並び替え
-    const orderedShareholders = players.filter(playerId => 
-      uniqueShareholders.includes(playerId)
-    );
+    // 株主がいなくても全プレイヤーをキューに追加
+    let orderedShareholders = uniqueShareholders.length > 0 
+      ? players.filter(playerId => uniqueShareholders.includes(playerId))
+      : [...players]; // 株主がいない場合は全プレイヤーを対象とする
+    
+    // 現在の手番プレイヤーから処理するように配列を並び替える
+    if (currentTurn && players.includes(currentTurn)) {
+      const currentTurnIndex = players.indexOf(currentTurn);
+      // 現在の手番プレイヤーから始まる順序に並び替え
+      const reorderedPlayers = [
+        ...players.slice(currentTurnIndex),
+        ...players.slice(0, currentTurnIndex)
+      ];
+      
+      // 順序付けされたプレイヤーの配列を使用して株主の順序を更新
+      orderedShareholders = uniqueShareholders.length > 0
+        ? reorderedPlayers.filter(playerId => uniqueShareholders.includes(playerId))
+        : reorderedPlayers;
+    }
 
+    // ホテルマージデータの準備
+    const preMergeHotelDataValue = hotelsToMerge.map(hotel => ({
+      id: String(hotel.id), // idをstringに変換
+      name: hotel.name,
+      tileCount: hotel.tiles.length
+    }));
+
+    // マージされるホテルをContextのHotelタイプに合わせる
+    const formattedHotels = hotelsToMerge.map(hotel => ({
+      id: String(hotel.id), // idをstringに変換
+      name: hotel.name,
+      tileCount: hotel.tiles.length
+    }));
+
+    // ローカル状態を更新
     if (setMergingPlayersQueue) {
       setMergingPlayersQueue(orderedShareholders);
     }
     if (setCurrentMergingPlayer) {
       setCurrentMergingPlayer(orderedShareholders[0] || null);
     }
-    
     if (setPreMergeHotelData) {
-      setPreMergeHotelData(hotelsToMerge.map(hotel => ({
-        id: hotel.id,
-        name: hotel.name,
-        tileCount: hotel.tiles.length
-      })));
+      setPreMergeHotelData(preMergeHotelDataValue);
     }
     if (setMergingHotels) {
-      setMergingHotels(hotelsToMerge);
+      setMergingHotels(formattedHotels);
     }
     if (setCurrentMergingHotel) {
-      setCurrentMergingHotel(hotelsToMerge[0]);
+      setCurrentMergingHotel(formattedHotels[0] || null);
     }
-  }, [setPreMergeHotelData, setMergingHotels, setCurrentMergingHotel, gameId, players, setMergingPlayersQueue, setCurrentMergingPlayer]);
+
+    // マージ状態をgame_tablesのmerge_stateカラムに保存
+    const mergeStateData = {
+      merging_hotels: formattedHotels,
+      pre_merge_hotel_data: preMergeHotelDataValue,
+      players_queue: orderedShareholders,
+      current_player: orderedShareholders[0] || null,
+      current_merging_hotel: formattedHotels[0] || null,
+      is_merging: true
+    };
+
+    const { error: mergeStateError } = await supabase
+      .from("game_tables")
+      .update({ merge_state: mergeStateData })
+      .eq("id", gameId);
+
+    if (mergeStateError) {
+      console.error("マージ状態保存エラー:", mergeStateError);
+    }
+  }, [setPreMergeHotelData, setMergingHotels, setCurrentMergingHotel, gameId, players, setMergingPlayersQueue, setCurrentMergingPlayer, currentTurn]);
 
   //hotel_investorsのデータを取得
   const [hotelInvestors, setHotelInvestors] = useState<{ hotel_name: string; user_id: string; shares: number }[]>([]);
@@ -989,10 +1034,72 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
       )
       .subscribe();
 
+    // マージ状態の変更を監視
+    const mergeStateChannel = supabase
+      .channel("game_tables_merge_state")
+      .on("postgres_changes", 
+        { event: "*", schema: "public", table: "game_tables", filter: `id=eq.${gameId}` }, 
+        async (payload) => {
+          console.log("マージ状態が更新されました:", payload);
+          // @ts-expect-error payloadの型定義がないためエラーになるが、実行時には存在する
+          if (payload.new && payload.new.merge_state && payload.new.merge_state.is_merging) {
+            // マージ状態の更新
+            if (setMergingHotels) {
+              // @ts-expect-error merge_stateのプロパティにアクセスするため
+              setMergingHotels(payload.new.merge_state.merging_hotels || []);
+            }
+            if (setPreMergeHotelData) {
+              // @ts-expect-error merge_stateのプロパティにアクセスするため
+              setPreMergeHotelData(payload.new.merge_state.pre_merge_hotel_data || []);
+            }
+            if (setMergingPlayersQueue) {
+              // @ts-expect-error merge_stateのプロパティにアクセスするため
+              setMergingPlayersQueue(payload.new.merge_state.players_queue || []);
+            }
+            if (setCurrentMergingPlayer) {
+              // @ts-expect-error merge_stateのプロパティにアクセスするため
+              setCurrentMergingPlayer(payload.new.merge_state.current_player);
+            }
+            if (setCurrentMergingHotel) {
+              // @ts-expect-error merge_stateのプロパティにアクセスするため
+              setCurrentMergingHotel(payload.new.merge_state.current_merging_hotel);
+            }
+          }
+        }
+      )
+      .subscribe();
+
     return () => {
       supabase.removeChannel(channel);
+      supabase.removeChannel(mergeStateChannel);
     };
-  }, [gameId]);
+  }, [gameId, setMergingHotels, setPreMergeHotelData, setMergingPlayersQueue, setCurrentMergingPlayer, setCurrentMergingHotel]);
+
+  // MergePopupコンポーネントを追加
+  const MergePopup = () => {
+    const { mergingHotels } = gameContext || {};
+    
+    if (!mergingHotels || mergingHotels.length === 0) return null;
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
+          <h3 className="text-lg font-bold mb-4">ホテルの合併が発生しました</h3>
+          <p>以下のホテルが合併されます:</p>
+          <ul className="mt-2 mb-4">
+            {mergingHotels.map((hotel: { id: string; name: string; tileCount: number }) => (
+              <li key={hotel.id} className="mb-1">
+                {hotel.name} ホテル (タイル数: {hotel.tileCount})
+              </li>
+            ))}
+          </ul>
+          <p className="text-sm text-gray-600">
+            各プレイヤーが株券の扱いを決定するまでお待ちください
+          </p>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="flex flex-col items-center p-4 bg-gray-100 border border-gray-300 w-full max-w-screen-md">
@@ -1041,6 +1148,9 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
           </div>
         </div>
       )}
+
+      {/* マージが発生した場合に表示されるポップアップ */}
+      {gameContext?.mergingHotels && gameContext.mergingHotels.length > 0 && gameContext.currentMergingPlayer !== playerId && <MergePopup />}
 
       <PlayerHand
         playerHand={playerHand}
