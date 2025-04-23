@@ -53,17 +53,17 @@ export const calculateStockPrice = (hotelName: string, tileCount: number) => {
     }
   }else if (hotelName === "雷"||hotelName === "嵐") {
     if (tileCount === 2) {
-      stockPrice = 500;
+      stockPrice = 400;
     } else if (tileCount === 3) {
-      stockPrice = 600;
-    } else if (tileCount === 4) {
       stockPrice = 500;
+    } else if (tileCount === 4) {
+      stockPrice = 600;
     } else if (tileCount === 5) {
       stockPrice = 700;
     } else if (tileCount >= 6&&tileCount <= 10) {
       stockPrice = 800;
     } else if (tileCount >= 11&&tileCount <= 20) {
-      stockPrice = 800;
+      stockPrice = 900;
     } else if (tileCount >= 21&&tileCount <= 30) {
       stockPrice = 1000;
     } else if (tileCount >= 31&&tileCount <= 40) {
