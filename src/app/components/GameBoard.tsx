@@ -40,7 +40,7 @@ export default function GameBoard({ gameId, playerId, players }: { gameId: strin
         <StockTable />
       </div>
       <div className="flex-1 overflow-y-auto">
-        {mergingHotels && (
+        {mergingHotels && mergingHotels.length > 0 && (
           <StockHandler
             gameId={gameId}
             playerId={playerId}

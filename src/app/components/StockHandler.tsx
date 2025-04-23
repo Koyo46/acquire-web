@@ -1,9 +1,32 @@
 import { useGame } from "@/src/app/contexts/GameContext";
 import { caluculateStockPrice } from "@/src/utils/hotelStockBoard";
+import { supabase } from "@/src/utils/supabaseClient";
+
 export default function StockHandler({ gameId, playerId, players }: { gameId: string, playerId: string, players: string[] }) {
-  const { preMergeHotelData, mergingHotels, setMergingHotels, currentMergingHotel, setCurrentMergingHotel } = useGame() || {};
+  const {
+    preMergeHotelData,
+    mergingHotels,
+    setMergingHotels,
+    currentMergingHotel,
+    setCurrentMergingHotel,
+    mergingPlayersQueue,
+    setMergingPlayersQueue,
+    currentMergingPlayer,
+    setCurrentMergingPlayer
+  } = useGame() || {};
+
   const handleMergeComplete = async () => {
-    if (mergingHotels && mergingHotels.length > 0) {
+    if (!mergingPlayersQueue || !currentMergingPlayer || !setMergingPlayersQueue || !setCurrentMergingPlayer) return;
+
+    // 現在のプレイヤーを処理済みとしてキューから削除
+    const newQueue = mergingPlayersQueue.filter(id => id !== currentMergingPlayer);
+    setMergingPlayersQueue(newQueue);
+
+    if (newQueue.length > 0) {
+      // 次のプレイヤーに移行
+      setCurrentMergingPlayer(newQueue[0]);
+    } else if (mergingHotels && mergingHotels.length > 0) {
+      // 次の買収対象ホテルに移行
       const remainingHotels = mergingHotels.slice(1);
       if (setMergingHotels) {
         setMergingHotels(remainingHotels);
@@ -11,8 +34,29 @@ export default function StockHandler({ gameId, playerId, players }: { gameId: st
       if (setCurrentMergingHotel) {
         setCurrentMergingHotel(remainingHotels[0] || null);
       }
+      
+      // 新しいホテルの株主を取得して処理キューを更新
+      if (remainingHotels.length > 0) {
+        const { data: shareholders } = await supabase
+          .from("hotel_investors")
+          .select("user_id")
+          .eq("hotel_name", remainingHotels[0].name)
+          .eq("game_id", gameId);
+
+        const uniqueShareholders = [...new Set(shareholders?.map(s => s.user_id) || [])];
+        const orderedShareholders = players.filter(playerId => 
+          uniqueShareholders.includes(playerId)
+        );
+
+        setMergingPlayersQueue(orderedShareholders);
+        setCurrentMergingPlayer(orderedShareholders[0] || null);
+      }
     }
   };
+
+  // 現在のプレイヤーの順番でない場合は表示しない
+  if (currentMergingPlayer !== playerId) return null;
+
   const sellShares = (hotel: any) => {
     console.log(hotel);
     handleMergeComplete();

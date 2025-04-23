@@ -14,6 +14,10 @@ interface GameContextType {
   setPreMergeHotelData: React.Dispatch<React.SetStateAction<any[]>>;
   mergingHotels: any[];
   setMergingHotels: React.Dispatch<React.SetStateAction<any[]>>;
+  mergingPlayersQueue: string[];
+  setMergingPlayersQueue: React.Dispatch<React.SetStateAction<string[]>>;
+  currentMergingPlayer: string | null;
+  setCurrentMergingPlayer: React.Dispatch<React.SetStateAction<string | null>>;
 }
 
 const GameContext = createContext<GameContextType | null>(null);
@@ -24,6 +28,8 @@ export const GameProvider = ({ gameId, children }: { gameId: string, children: R
   const [currentMergingHotel, setCurrentMergingHotel] = useState<any | null>(null);
   const [preMergeHotelData, setPreMergeHotelData] = useState<any[]>([]);
   const [mergingHotels, setMergingHotels] = useState<any[]>([]);
+  const [mergingPlayersQueue, setMergingPlayersQueue] = useState<string[]>([]);
+  const [currentMergingPlayer, setCurrentMergingPlayer] = useState<string | null>(null);
 
   useEffect(() => {
     if (!gameId) return;
@@ -81,7 +87,7 @@ export const GameProvider = ({ gameId, children }: { gameId: string, children: R
   };
 
   return (
-    <GameContext.Provider value={{ currentTurn, endTurn, fetchGameStarted, gameStarted, setGameStarted, currentMergingHotel, setCurrentMergingHotel, preMergeHotelData, setPreMergeHotelData, mergingHotels, setMergingHotels }}>
+    <GameContext.Provider value={{ currentTurn, endTurn, fetchGameStarted, gameStarted, setGameStarted, currentMergingHotel, setCurrentMergingHotel, preMergeHotelData, setPreMergeHotelData, mergingHotels, setMergingHotels, mergingPlayersQueue, setMergingPlayersQueue, currentMergingPlayer, setCurrentMergingPlayer }}>
       {children}
     </GameContext.Provider>
   );
