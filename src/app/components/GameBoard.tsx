@@ -21,9 +21,12 @@ export default function GameBoard({ gameId, playerId, players }: { gameId: strin
   }, [mergingHotels]);
 
   useEffect(() => {
-    if (!isInitialized) {
-      updateAll(gameId, players);
-    }
+    const initializeData = async () => {
+      if (!isInitialized) {
+        await updateAll(gameId, players);
+      }
+    };
+    initializeData();
   }, [gameId, players, isInitialized, updateAll]);
 
   useEffect(() => {

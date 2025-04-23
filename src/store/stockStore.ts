@@ -131,13 +131,19 @@ export const useStockStore = create<StockState>((set: SetState, get: GetState) =
 
   updateAll: async (gameId: string, players: string[]) => {
     console.log("データ更新を開始します");
-    await Promise.all([
-      get().fetchHotels(gameId),
-      get().fetchHotelInvestors(gameId),
-      get().fetchPlayerStatuses(gameId, players)
-    ]);
-    console.log("データ更新が完了しました");
-    set((state) => ({ isInitialized: true }));
+    try {
+      await Promise.all([
+        get().fetchHotels(gameId),
+        get().fetchHotelInvestors(gameId),
+        get().fetchPlayerStatuses(gameId, players)
+      ]);
+      console.log("データ更新が完了しました");
+      set(() => ({ isInitialized: true }));
+    } catch (error) {
+      console.error("データ更新エラー:", error);
+      // エラーが発生しても初期化フラグは立てる
+      set(() => ({ isInitialized: true }));
+    }
   },
 
   subscribeToChanges: (gameId: string, players: string[]) => {
