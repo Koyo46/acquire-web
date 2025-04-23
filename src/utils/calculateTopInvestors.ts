@@ -1,6 +1,9 @@
 interface HotelInvestor {
   hotel_name: string;
   user_id: string;
+  users?: {
+    username: string;
+  };
   shares: number;
 }
 
