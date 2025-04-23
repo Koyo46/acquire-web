@@ -85,7 +85,10 @@ export const useStockStore = create<StockState>((set, get) => ({
         .select('*, users(username)')
         .eq('game_id', gameId);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching hotel investors:', error.message);
+        throw error;
+      }
       set({ hotelInvestors: investors || [], error: null });
     } catch (error) {
       console.error('Error fetching hotel investors:', error);
