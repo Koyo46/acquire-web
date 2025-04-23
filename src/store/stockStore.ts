@@ -17,7 +17,9 @@ type Hotel = {
 type HotelInvestor = {
   id: string;
   user_id: string;
-  user_name: string;
+  users: {
+    username: string;
+  };
   hotel_name: string;
   shares: number;
   game_id: string;
