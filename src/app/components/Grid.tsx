@@ -614,9 +614,10 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
       );
       console.log(largestHotel);
       console.log("foundAdjacentHotels", foundAdjacentHotels);
-      setSmallHotels(foundAdjacentHotels.filter(hotel => hotel.name !== largestHotel.name));
-      console.log("smallHotels", smallHotels);
-      for (const hotel of smallHotels) {
+      const hotelsToProcess = foundAdjacentHotels.filter(hotel => hotel.name !== largestHotel.name);
+      setSmallHotels(hotelsToProcess);
+      console.log("smallHotels to process:", hotelsToProcess);
+      for (const hotel of hotelsToProcess) {
         const { topInvestor, secondInvestor } = calculateTopInvestors(hotelInvestors, hotel.name);
         const dividend = await getDividendByHotelName(hotel.name);
         await dealDividend(topInvestor.user_id, dividend);
@@ -643,10 +644,10 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
       };
       updatedHotels = updatedHotels.map(h =>
         h.id === largestHotel.id ? updatedLargestHotel : h
-      ).filter(h => !smallHotels.some(sh => sh.id === h.id));
+      ).filter(h => !hotelsToProcess.some(sh => sh.id === h.id));
       setEstablishedHotels(updatedHotels);
 
-      handleMerge(foundAdjacentHotels.filter(hotel => hotel.name !== largestHotel.name));
+      handleMerge(hotelsToProcess);
       // 吸収されたホテルを削除
       const absorbedHotels = foundAdjacentHotels.filter(h => h.id !== largestHotel.id);
       for (const hotel of absorbedHotels) {

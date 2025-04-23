@@ -247,7 +247,7 @@ export default function StockHandler({ gameId, playerId, players }: { gameId: st
     if (!isCurrentPlayer) return;
     
     // 株式を2枚を1枚と交換する処理
-    if (shares > 0 && mergingHotels && mergingHotels.length > 0) {
+    if (shares > 1 && mergingHotels && mergingHotels.length > 0) {
       // 大きいホテルを見つける
       const { data: largestHotel } = await supabase
         .from("hotels")
