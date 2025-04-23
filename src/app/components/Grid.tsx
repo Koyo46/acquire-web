@@ -19,7 +19,7 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
   const [pendingTile, setPendingTile] = useState<{ col: number; row: string } | null>(null);
   const [confirming, setConfirming] = useState(false);
   const gameContext = useGame();
-  const { currentTurn, endTurn, fetchGameStarted } = gameContext || {};
+  const { currentTurn, endTurn, fetchGameStarted, setMergingPlayersQueue, setCurrentMergingPlayer } = gameContext || {};
   const [gameStarted, setGameStarted] = useState(false);
   const nextPlayerId = players[(players.indexOf(currentTurn || "") + 1) % players.length];
   const [putTile, setPutTile] = useState(false);
@@ -45,6 +45,7 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
     return data;
   }, [gameId]);
 
+  // 配置されたタイルのリストを取得
   useEffect(() => {
     const fetchData = async () => {
       const tiles = await fetchTilesStatus();
@@ -75,6 +76,7 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
     };
   }, [gameId, fetchTilesStatus]);
 
+  // ゲームが開始されたかどうかを取得
   useEffect(() => {
     if (!fetchGameStarted || !gameId) return;
     
@@ -168,9 +170,8 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
     // tier: "low" | "medium" | "high";
   }[]>([]);
 
-  const allHotels = ["空", "雲", "晴", "霧", "雷", "嵐", "雨"]; // すべてのホテル名
-
   const completeHotelList = useMemo(() => {
+    const allHotels = ["空", "雲", "晴", "霧", "雷", "嵐", "雨"]; // すべてのホテル名
     const existingHotels = establishedHotels.reduce((acc, hotel) => {
       acc[hotel.name] = hotel.tiles.length;
       return acc;
@@ -180,7 +181,7 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
       name,
       tiles: existingHotels[name] || 0,
     }));
-  }, [establishedHotels, allHotels]);
+  }, [establishedHotels]);
 
   const dealTiles = async () => {
     // 空いているタイルを取得
@@ -358,15 +359,43 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
   // ホテル選択モーダルの状態
   const [selectedTile, setSelectedTile] = useState<{ col: number; row: string; adjacentTiles: { col: number; row: string }[] } | null>(null);
   const [bornNewHotel, setBornNewHotel] = useState(false); // 新しいホテルが誕生したかどうかを保持
-  const { mergingHotels, setMergingHotels } = gameContext || {};
+  const { setMergingHotels } = gameContext || {};
   const [smallHotels, setSmallHotels] = useState<{ id: number; name: string; tiles: { col: number; row: string }[] }[]>([]);
   const { setPreMergeHotelData } = gameContext || {};
   const { setCurrentMergingHotel } = gameContext || {};
   const handleMerge = useCallback(async (hotelsToMerge: { id: number; name: string; tiles: { col: number; row: string }[] }[]) => {
-    // 空の配列が渡された場合は何もしない
     if (hotelsToMerge.length === 0) return;
     
     console.log("Merging hotels:", hotelsToMerge);
+    
+    // 買収されるホテルの株主を取得
+    const mergedHotelNames = hotelsToMerge.map(hotel => hotel.name);
+    const { data: shareholders, error } = await supabase
+      .from("hotel_investors")
+      .select("user_id")
+      .in("hotel_name", mergedHotelNames)
+      .eq("game_id", gameId);
+
+    if (error) {
+      console.error("株主取得エラー:", error);
+      return;
+    }
+
+    // 重複を除去して株主のリストを作成
+    const uniqueShareholders = [...new Set(shareholders.map(s => s.user_id))];
+    
+    // プレイヤーの順番に並び替え
+    const orderedShareholders = players.filter(playerId => 
+      uniqueShareholders.includes(playerId)
+    );
+
+    if (setMergingPlayersQueue) {
+      setMergingPlayersQueue(orderedShareholders);
+    }
+    if (setCurrentMergingPlayer) {
+      setCurrentMergingPlayer(orderedShareholders[0] || null);
+    }
+    
     if (setPreMergeHotelData) {
       setPreMergeHotelData(hotelsToMerge.map(hotel => ({
         id: hotel.id,
@@ -376,12 +405,11 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
     }
     if (setMergingHotels) {
       setMergingHotels(hotelsToMerge);
-      console.log("mergingHotels", mergingHotels);
     }
     if (setCurrentMergingHotel) {
       setCurrentMergingHotel(hotelsToMerge[0]);
     }
-  }, [setPreMergeHotelData, setMergingHotels, setCurrentMergingHotel, mergingHotels]);
+  }, [setPreMergeHotelData, setMergingHotels, setCurrentMergingHotel, gameId, players, setMergingPlayersQueue, setCurrentMergingPlayer]);
 
   //hotel_investorsのデータを取得
   const [hotelInvestors, setHotelInvestors] = useState<{ hotel_name: string; user_id: string; shares: number }[]>([]);
@@ -418,15 +446,8 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
     // smallHotelsが空の場合は何もしない
     if (smallHotels.length === 0) return;
     
-    const channel = supabase
-      .channel("small_hotels")
-      .on("postgres_changes", { event: "*", schema: "public", table: "hotels" }, async () => {
-        handleMerge(smallHotels);
-      })
-      .subscribe();
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    // 直接handleMergeを呼び出す
+    handleMerge(smallHotels);
   }, [smallHotels, handleMerge]);
   // 配当を分配
   const dealDividend = async (userId: string, dividend: number) => {
@@ -457,12 +478,29 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
   // 隣接するタイルを取得
   const getAdjacentTiles = (col: number, row: string) => {
     const rowIndex = rowLabels.indexOf(row);
-    return [
-      { col: col - 1, row }, // 左
-      { col: col + 1, row }, // 右
-      { col, row: rowLabels[rowIndex - 1] }, // 上
-      { col, row: rowLabels[rowIndex + 1] }, // 下
-    ].filter(tile => tile.row && tile.col >= 1 && tile.col <= 12); // 無効な座標を除外
+    const adjacentTiles = [];
+
+    // 左のタイル
+    if (col > 1) {
+      adjacentTiles.push({ col: col - 1, row });
+    }
+
+    // 右のタイル
+    if (col < 12) {
+      adjacentTiles.push({ col: col + 1, row });
+    }
+
+    // 上のタイル
+    if (rowIndex > 0) {
+      adjacentTiles.push({ col, row: rowLabels[rowIndex - 1] });
+    }
+
+    // 下のタイル
+    if (rowIndex < rowLabels.length - 1) {
+      adjacentTiles.push({ col, row: rowLabels[rowIndex + 1] });
+    }
+
+    return adjacentTiles;
   };
 
   // タイルをクリックしたときの処理
@@ -505,10 +543,15 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
         return;
       }
 
+      // ホテルのタイル情報を更新
+      const updatedHotel = {
+        ...hotel,
+        tiles: [...hotel.tiles, newTile]
+      };
       updatedHotels = updatedHotels.map(h =>
-        h.id === hotel.id ? { ...h, tiles: [...h.tiles, newTile] } : h
+        h.id === hotel.id ? updatedHotel : h
       );
-
+      setEstablishedHotels(updatedHotels);
     } else if (foundAdjacentHotels.length > 1) {
       const hotelsWithMoreThan11Tiles = foundAdjacentHotels.filter(hotel => hotel.tiles.length >= 11);
       if (hotelsWithMoreThan11Tiles.length >= 2) {
@@ -549,6 +592,17 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
         console.error("ホテル合併エラー:", error);
         return;
       }
+
+      // 合併後のホテル情報を更新
+      const updatedLargestHotel = {
+        ...largestHotel,
+        tiles: [...largestHotel.tiles, newTile, ...adjacentPlacedTiles]
+      };
+      updatedHotels = updatedHotels.map(h =>
+        h.id === largestHotel.id ? updatedLargestHotel : h
+      ).filter(h => !smallHotels.some(sh => sh.id === h.id));
+      setEstablishedHotels(updatedHotels);
+
       handleMerge(foundAdjacentHotels.filter(hotel => hotel.name !== largestHotel.name));
       // 吸収されたホテルを削除
       const absorbedHotels = foundAdjacentHotels.filter(h => h.id !== largestHotel.id);
@@ -570,7 +624,7 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
       setSelectedTile({ col, row, adjacentTiles: adjacentPlacedTiles });
       return;
     }
-    // **最後に setState を実行**
+    // 最後に setState を実行
     setEstablishedHotels(updatedHotels);
     setPlacedTiles(prev => [...new Set([...prev, newTile])]);
   };
@@ -731,6 +785,25 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
       alert("1ターンで購入できる株券は3枚までです。");
       return;
     }
+
+    // プレイヤーの所持金を取得
+    const { data: userData, error: userError } = await supabase
+      .from("users")
+      .select("balance")
+      .eq("id", playerId)
+      .single();
+
+    if (userError || !userData) {
+      console.error("所持金取得エラー:", userError);
+      return;
+    }
+
+    const stockPrice = await getStockPriceByHotelName(hotelName);
+    if (userData.balance < stockPrice) {
+      alert("所持金が不足しています。");
+      return;
+    }
+
     const { data, error } = await supabase.from("hotel_investors").select("shares").eq("hotel_name", hotelName).eq("user_id", playerId);
     console.log(data);
     if (error) {
@@ -747,19 +820,6 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
       }
 
       console.log(`${hotelName} の株券を買います`);
-      const stockPrice = await getStockPriceByHotelName(hotelName);
-
-      // プレイヤーの所持金を更新
-      const { data: userData, error: userError } = await supabase
-        .from("users")
-        .select("balance")
-        .eq("id", playerId)
-        .single();
-
-      if (userError || !userData) {
-        console.error("所持金取得エラー:", userError);
-        return;
-      }
 
       const newBalance = userData.balance - stockPrice;
       console.log(newBalance);
@@ -792,22 +852,13 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
         alert(`${hotelName} の株券はこれ以上購入できません`);
         return;
       }
-      const stockPrice = await getStockPriceByHotelName(hotelName);
 
-      // プレイヤーの所持金を更新
-      const { data: userData, error: userError } = await supabase
-        .from("users")
-        .select("balance")
-        .eq("id", playerId)
-        .single();
-
-      if (userError || !userData) {
-        console.error("所持金取得エラー:", userError);
+      const newBalance = userData.balance - stockPrice;
+      if (newBalance < 0) {
+        alert("所持金が不足しています。");
         return;
       }
 
-      const newBalance = userData.balance - stockPrice;
-      console.log(newBalance);
       const { error: balanceError } = await supabase
         .from("users")
         .update({ balance: newBalance })
@@ -817,6 +868,7 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
         console.error("所持金更新エラー:", balanceError);
         return;
       }
+
       const { error } = await supabase.from("hotel_investors")
         .update({
           shares: data[0].shares + 1
