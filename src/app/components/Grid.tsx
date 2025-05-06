@@ -1107,6 +1107,7 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
     await supabase.from("game_tables").update({ current_turn: null, status: "ongoing" }).eq("id", gameId);
     await supabase.from("hotel_investors").delete().eq("game_id", gameId);
     await supabase.from("users").update({ balance: 6000 }).in("id", players);
+    await supabase.from("game_logs").delete().eq("game_id", gameId);
     setEstablishedHotels([]);
     setPlacedTiles([]);
     setPlayerHand([]);
