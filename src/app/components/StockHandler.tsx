@@ -28,39 +28,48 @@ export default function StockHandler({ gameId, playerId, players }: { gameId: st
 
   // マージ状態をDBから更新する関数
   const updateMergeStateFromDB = useCallback(async () => {
-    const { data, error } = await supabase
-      .from("game_tables")
-      .select("merge_state")
-      .eq("id", gameId)
-      .single();
+    try {
+      const { data, error } = await supabase
+        .from("game_tables")
+        .select("merge_state")
+        .eq("id", gameId)
+        .single();
 
-    if (error) {
-      console.error("マージ状態取得エラー:", error);
-      return;
-    }
+      if (error) {
+        console.error("マージ状態取得エラー:", error.message);
+        return;
+      }
 
-    if (data && data.merge_state) {
-      const mergeState = data.merge_state;
-      
-      if (setMergingHotels && mergeState.merging_hotels) {
-        setMergingHotels(mergeState.merging_hotels);
+      if (!data) {
+        console.log("マージ状態データが存在しません");
+        return;
       }
-      
-      if (setPreMergeHotelData && mergeState.pre_merge_hotel_data) {
-        setPreMergeHotelData(mergeState.pre_merge_hotel_data);
+
+      if (data && data.merge_state) {
+        const mergeState = data.merge_state;
+        
+        if (setMergingHotels && mergeState.merging_hotels) {
+          setMergingHotels(mergeState.merging_hotels);
+        }
+        
+        if (setPreMergeHotelData && mergeState.pre_merge_hotel_data) {
+          setPreMergeHotelData(mergeState.pre_merge_hotel_data);
+        }
+        
+        if (setMergingPlayersQueue && mergeState.players_queue) {
+          setMergingPlayersQueue(mergeState.players_queue);
+        }
+        
+        if (setCurrentMergingPlayer) {
+          setCurrentMergingPlayer(mergeState.current_player);
+        }
+        
+        if (setCurrentMergingHotel) {
+          setCurrentMergingHotel(mergeState.current_merging_hotel);
+        }
       }
-      
-      if (setMergingPlayersQueue && mergeState.players_queue) {
-        setMergingPlayersQueue(mergeState.players_queue);
-      }
-      
-      if (setCurrentMergingPlayer) {
-        setCurrentMergingPlayer(mergeState.current_player);
-      }
-      
-      if (setCurrentMergingHotel) {
-        setCurrentMergingHotel(mergeState.current_merging_hotel);
-      }
+    } catch (err) {
+      console.error("マージ状態更新中に予期せぬエラーが発生:", err);
     }
   }, [gameId, setMergingHotels, setPreMergeHotelData, setMergingPlayersQueue, setCurrentMergingPlayer, setCurrentMergingHotel]);
 
