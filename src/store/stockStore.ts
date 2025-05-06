@@ -197,9 +197,17 @@ export const useStockStore = create<StockState>((set, get) => ({
       })
       .subscribe();
 
+    const userChannel = supabase
+      .channel('user_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, () => {
+        get().fetchPlayerStatuses(gameId, players);
+      })
+      .subscribe();
+
     return () => {
       hotelChannel.unsubscribe();
       investorChannel.unsubscribe();
+      userChannel.unsubscribe();
     };
   }
 })); 
