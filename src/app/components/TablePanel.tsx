@@ -7,13 +7,15 @@ interface TablePanelProps {
   onJoinAsPlayer: (tableId: string, playerName: string) => void;
   onJoinAsSpectator: (tableId: string) => void;
   onJoinAsExistingUser: (tableId: string, userId: string) => void;
+  onDeleteTable: (tableId: string) => void;
 }
 
 export default function TablePanel({
   table,
   onJoinAsPlayer,
   onJoinAsSpectator,
-  onJoinAsExistingUser
+  onJoinAsExistingUser,
+  onDeleteTable
 }: TablePanelProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [playerName, setPlayerName] = useState("");
@@ -145,6 +147,13 @@ export default function TablePanel({
               className="w-full px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 transition-colors"
             >
               観戦者として参加
+            </button>
+            
+            <button
+              onClick={() => onDeleteTable(table.id)}
+              className="w-full px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors"
+            >
+              テーブルを削除
             </button>
           </div>
         </div>

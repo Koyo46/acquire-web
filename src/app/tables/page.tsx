@@ -105,8 +105,8 @@ export default function TablesPage() {
         return;
       }
 
-      // ゲームページに遷移
-      router.push(`/game?playerId=${newUser.id}`);
+      // ゲームページに自動入室
+      router.push(`/game?gameId=${tableId}&playerId=${newUser.id}`);
     } catch (error) {
       console.error("参加処理エラー:", error);
       alert("参加処理に失敗しました");
@@ -123,12 +123,112 @@ export default function TablesPage() {
     router.push(`/game?gameId=${tableId}&playerId=${userId}`);
   };
 
+  const handleDeleteTable = async (tableId: string) => {
+    const confirmDelete = confirm("このテーブルを削除しますか？関連するデータも全て削除されます。");
+    if (!confirmDelete) return;
+
+    try {
+      // 関連データを削除（順番が重要：外部キー制約により）
+      // 1. game_logs
+      const { error: logsError } = await supabase
+        .from("game_logs")
+        .delete()
+        .eq("game_id", tableId);
+
+      if (logsError) {
+        console.error("ゲームログ削除エラー:", logsError);
+      }
+
+      // 2. hotel_investors
+      const { error: investorsError } = await supabase
+        .from("hotel_investors")
+        .delete()
+        .eq("game_id", tableId);
+
+      if (investorsError) {
+        console.error("投資家データ削除エラー:", investorsError);
+      }
+
+      // 3. hotels
+      const { error: hotelsError } = await supabase
+        .from("hotels")
+        .delete()
+        .eq("game_id", tableId);
+
+      if (hotelsError) {
+        console.error("ホテルデータ削除エラー:", hotelsError);
+      }
+
+      // 4. hands
+      const { error: handsError } = await supabase
+        .from("hands")
+        .delete()
+        .eq("game_id", tableId);
+
+      if (handsError) {
+        console.error("手牌データ削除エラー:", handsError);
+      }
+
+      // 5. tiles
+      const { error: tilesError } = await supabase
+        .from("tiles")
+        .delete()
+        .eq("game_id", tableId);
+
+      if (tilesError) {
+        console.error("タイルデータ削除エラー:", tilesError);
+      }
+
+      // 6. game_players
+      const { error: gamePlayersError } = await supabase
+        .from("game_players")
+        .delete()
+        .eq("game_id", tableId);
+
+      if (gamePlayersError) {
+        console.error("ゲームプレイヤーデータ削除エラー:", gamePlayersError);
+      }
+
+      // 7. usersテーブルからこのゲームのプレイヤーを削除
+      const { error: usersError } = await supabase
+        .from("users")
+        .delete()
+        .eq("game_id", tableId);
+
+      if (usersError) {
+        console.error("ユーザーデータ削除エラー:", usersError);
+      }
+
+      // 8. 最後にgame_tablesを削除
+      const { error: tableError } = await supabase
+        .from("game_tables")
+        .delete()
+        .eq("id", tableId);
+
+      if (tableError) {
+        console.error("テーブル削除エラー:", tableError);
+        alert("テーブル削除に失敗しました");
+        return;
+      }
+
+      fetchTables(); // テーブル一覧を更新
+      alert("テーブルを削除しました");
+    } catch (error) {
+      console.error("削除処理エラー:", error);
+      alert("削除処理に失敗しました");
+    }
+  };
+
   const handleCreateTable = async (tableName: string, _maxPlayers: number) => {
     try {
+      // UUIDを生成
+      const gameId = crypto.randomUUID();
+
       // 既存のスキーマに合わせてテーブルを作成
       const { data, error } = await supabase
         .from("game_tables")
         .insert({
+          id: gameId,
           status: "ongoing"
           // 現在のスキーマではtable_nameとmax_playersカラムがないため、statusのみ設定
           // "ongoing": ゲーム進行中, "started": ゲーム開始済み
@@ -139,6 +239,24 @@ export default function TablesPage() {
       if (error) {
         console.error("テーブル作成エラー:", error);
         alert("テーブル作成に失敗しました");
+        return;
+      }
+
+      // 108枚のタイルを作成
+      const tiles = Array.from({ length: 108 }, (_, index) => ({
+        game_id: data.id,
+        tile_kind: index + 1,
+        placed: false,
+        dealed: false
+      }));
+
+      const { error: tilesError } = await supabase
+        .from("tiles")
+        .insert(tiles);
+
+      if (tilesError) {
+        console.error("タイル作成エラー:", tilesError);
+        alert("タイル作成に失敗しました");
         return;
       }
 
@@ -191,6 +309,7 @@ export default function TablesPage() {
                 onJoinAsPlayer={handleJoinAsPlayer}
                 onJoinAsSpectator={handleJoinAsSpectator}
                 onJoinAsExistingUser={handleJoinAsExistingUser}
+                onDeleteTable={handleDeleteTable}
               />
             ))}
           </div>

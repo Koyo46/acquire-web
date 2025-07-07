@@ -25,34 +25,60 @@ export default function GameBoard({ gameId, playerId, players }: { gameId: strin
   // ゲームログの状態
   const [gameLogs, setGameLogs] = useState<LogEntry[]>([]);
   const [showLogModal, setShowLogModal] = useState(false);
+  const [playersWithUsernames, setPlayersWithUsernames] = useState<Player[]>([]);
 
   useEffect(() => {
     console.log("mergingHotels", mergingHotels);
   }, [mergingHotels]);
 
+  // プレイヤーの実際のユーザー名を取得
+  useEffect(() => {
+    const fetchPlayerUsernames = async () => {
+      if (players.length > 0) {
+        const { data: usersData, error } = await supabase
+          .from('users')
+          .select('id, username')
+          .in('id', players);
+        
+        if (error) {
+          console.error('ユーザー名取得エラー:', error);
+          // エラーの場合は仮の名前を使用
+          const playerObjects: Player[] = players.map(id => ({
+            id,
+            username: `プレイヤー${id.slice(0, 8)}`
+          }));
+          setPlayersWithUsernames(playerObjects);
+        } else {
+          const playerObjects: Player[] = usersData.map(user => ({
+            id: user.id,
+            username: user.username
+          }));
+          setPlayersWithUsernames(playerObjects);
+          console.log('プレイヤー情報取得成功:', playerObjects);
+        }
+      }
+    };
+    
+    fetchPlayerUsernames();
+  }, [players]);
+
   useEffect(() => {
     const initializeData = async () => {
-      if (!isInitialized && players.length > 0) {
-        const playerObjects: Player[] = players.map(id => ({
-          id,
-          username: `プレイヤー${id}`
-        }));
-        await updateAll(gameId, playerObjects);
+      if (!isInitialized && playersWithUsernames.length > 0) {
+        await updateAll(gameId, playersWithUsernames);
       }
     };
     initializeData();
-  }, [gameId, players, isInitialized, updateAll]);
+  }, [gameId, playersWithUsernames, isInitialized, updateAll]);
 
   useEffect(() => {
-    const playerObjects: Player[] = players.map(id => ({
-      id,
-      username: `プレイヤー${id}`
-    }));
-    const unsubscribe = subscribeToChanges(gameId, playerObjects);
-    return () => {
-      if (unsubscribe) unsubscribe();
-    };
-  }, [gameId, players, subscribeToChanges]);
+    if (playersWithUsernames.length > 0) {
+      const unsubscribe = subscribeToChanges(gameId, playersWithUsernames);
+      return () => {
+        if (unsubscribe) unsubscribe();
+      };
+    }
+  }, [gameId, playersWithUsernames, subscribeToChanges]);
   
   // ゲームログを取得する関数をより頻繁に呼び出し、デバッグ情報を追加
   const fetchGameLogs = async () => {
