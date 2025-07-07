@@ -3,8 +3,9 @@ import { Suspense } from "react";
 import React, { useEffect, useState } from "react";
 import { supabase } from "@/src/utils/supabaseClient";
 import GameBoard from "@/src/app/components/GameBoard";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { GameProvider } from "@/src/app/contexts/GameContext";
+
 export default function Page() {
   const [gameId, setGameId] = useState<string | null>(null);
   const [players, setPlayers] = useState<string[]>([]);
@@ -32,22 +33,37 @@ function PageContent({
   setPlayerId: React.Dispatch<React.SetStateAction<string | null>>;
 }) {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const playerId = searchParams.get("playerId");
+  const gameId = searchParams.get("gameId");
+  const isSpectator = searchParams.get("spectator") === "true";
 
   useEffect(() => {
-    const fetchGameData = async () => {
-      // 進行中のゲームを取得
-      const { data: gameData, error: gameError } = await supabase
-        .from("game_tables")
-        .select("id")
-        .single();
+    // プレイヤーIDまたはゲームIDが指定されていない場合、テーブル一覧に遷移
+    if (!playerId && !gameId) {
+      router.push("/tables");
+      return;
+    }
 
-      if (gameError || !gameData) {
-        console.error("ゲームの取得エラー:", gameError);
-        return;
+    const fetchGameData = async () => {
+      let targetGameId = gameId;
+      
+      if (!targetGameId) {
+        // 進行中のゲームを取得
+        const { data: gameData, error: gameError } = await supabase
+          .from("game_tables")
+          .select("id")
+          .single();
+
+        if (gameError || !gameData) {
+          console.error("ゲームの取得エラー:", gameError);
+          router.push("/tables");
+          return;
+        }
+        targetGameId = gameData.id;
       }
 
-      setGameId(gameData.id);
+      setGameId(targetGameId);
 
       const fetchGamePlayers = async (gameId: string) => {
         const { data, error } = await supabase
@@ -63,12 +79,12 @@ function PageContent({
         return data.map(({ player_id }) => player_id);
       };
 
-      const playerIds = await fetchGamePlayers(gameData.id);
+      const playerIds = await fetchGamePlayers(targetGameId);
       setPlayers(playerIds);
     };
 
     fetchGameData();
-  }, [setGameId, setPlayers]);
+  }, [setGameId, setPlayers, router, playerId, gameId]);
 
   useEffect(() => {
     setPlayerId(playerId);
