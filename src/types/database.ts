@@ -89,8 +89,14 @@ export interface GameLog {
 }
 
 // UI specific types
+export interface Player {
+  id: string;
+  username: string;
+}
+
 export interface TablePanelData extends GameTable {
   current_players?: number;
+  players?: Player[];
 }
 
 export interface CreateTableData {

@@ -18,30 +18,57 @@ export default function TablesPage() {
 
   const fetchTables = async () => {
     try {
-      const { data, error } = await supabase
+      // 既存カラムのみを使用
+      const { data: tablesData, error } = await supabase
         .from("game_tables")
-        .select(`
-          id,
-          status,
-          table_name,
-          max_players,
-          created_at,
-          created_by,
-          game_players(count)
-        `)
-        .order("created_at", { ascending: false });
+        .select("id, status, current_turn")
+        .order("id", { ascending: false });
 
       if (error) {
         console.error("テーブル取得エラー:", error);
         return;
       }
 
-      const tablesWithPlayerCount = data?.map((table: any) => ({
-        ...table,
-        current_players: table.game_players?.length || 0
-      })) || [];
+      // 各テーブルのプレイヤー情報を取得
+      const tablesWithPlayerInfo = await Promise.all(
+        (tablesData || []).map(async (table: any) => {
+          const { data: gamePlayersData, error: gamePlayersError } = await supabase
+            .from("game_players")
+            .select("player_id")
+            .eq("game_id", table.id);
 
-      setTables(tablesWithPlayerCount);
+          if (gamePlayersError) {
+            console.error("プレイヤー数取得エラー:", gamePlayersError);
+          }
+
+          // プレイヤーの詳細情報を取得
+          const players = [];
+          if (gamePlayersData && gamePlayersData.length > 0) {
+            const playerIds = gamePlayersData.map(gp => gp.player_id);
+            const { data: usersData, error: usersError } = await supabase
+              .from("users")
+              .select("id, username")
+              .in("id", playerIds);
+
+            if (usersError) {
+              console.error("ユーザー情報取得エラー:", usersError);
+            } else {
+              players.push(...(usersData || []));
+            }
+          }
+
+          return {
+            ...table,
+            table_name: `テーブル ${table.id.slice(0, 8)}`, // IDの最初の8文字をテーブル名として使用
+            max_players: 6, // デフォルト値
+            created_at: new Date().toISOString(), // 仮の作成日時
+            current_players: players.length,
+            players: players
+          };
+        })
+      );
+
+      setTables(tablesWithPlayerInfo);
     } catch (error) {
       console.error("テーブル取得エラー:", error);
     } finally {
@@ -79,7 +106,7 @@ export default function TablesPage() {
       }
 
       // ゲームページに遷移
-      router.push(`/?playerId=${newUser.id}`);
+      router.push(`/game?playerId=${newUser.id}`);
     } catch (error) {
       console.error("参加処理エラー:", error);
       alert("参加処理に失敗しました");
@@ -88,17 +115,23 @@ export default function TablesPage() {
 
   const handleJoinAsSpectator = async (tableId: string) => {
     // 観戦者として参加（playerId無しでゲーム画面に遷移）
-    router.push(`/?gameId=${tableId}&spectator=true`);
+    router.push(`/game?gameId=${tableId}&spectator=true`);
   };
 
-  const handleCreateTable = async (tableName: string, maxPlayers: number) => {
+  const handleJoinAsExistingUser = async (tableId: string, userId: string) => {
+    // 既存ユーザーとしてゲーム画面に遷移
+    router.push(`/game?gameId=${tableId}&playerId=${userId}`);
+  };
+
+  const handleCreateTable = async (tableName: string, _maxPlayers: number) => {
     try {
+      // 既存のスキーマに合わせてテーブルを作成
       const { data, error } = await supabase
         .from("game_tables")
         .insert({
-          table_name: tableName,
-          max_players: maxPlayers,
-          status: "waiting"
+          status: "ongoing"
+          // 現在のスキーマではtable_nameとmax_playersカラムがないため、statusのみ設定
+          // "ongoing": ゲーム進行中, "started": ゲーム開始済み
         })
         .select("id")
         .single();
@@ -111,6 +144,7 @@ export default function TablesPage() {
 
       setShowCreateModal(false);
       fetchTables(); // テーブル一覧を更新
+      alert(`テーブル「${tableName}」を作成しました（ID: ${data.id.slice(0, 8)}）`);
     } catch (error) {
       console.error("テーブル作成エラー:", error);
       alert("テーブル作成に失敗しました");
@@ -156,6 +190,7 @@ export default function TablesPage() {
                 table={table}
                 onJoinAsPlayer={handleJoinAsPlayer}
                 onJoinAsSpectator={handleJoinAsSpectator}
+                onJoinAsExistingUser={handleJoinAsExistingUser}
               />
             ))}
           </div>

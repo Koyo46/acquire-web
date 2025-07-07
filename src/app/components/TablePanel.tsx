@@ -6,22 +6,24 @@ interface TablePanelProps {
   table: TablePanelData;
   onJoinAsPlayer: (tableId: string, playerName: string) => void;
   onJoinAsSpectator: (tableId: string) => void;
+  onJoinAsExistingUser: (tableId: string, userId: string) => void;
 }
 
 export default function TablePanel({
   table,
   onJoinAsPlayer,
-  onJoinAsSpectator
+  onJoinAsSpectator,
+  onJoinAsExistingUser
 }: TablePanelProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [playerName, setPlayerName] = useState("");
 
   const getStatusText = (status: string) => {
     switch (status) {
-      case "waiting":
-        return "待機中";
-      case "started":
+      case "ongoing":
         return "進行中";
+      case "started":
+        return "開始済み";
       case "completed":
         return "終了";
       default:
@@ -31,10 +33,10 @@ export default function TablePanel({
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "waiting":
-        return "bg-green-100 text-green-800";
-      case "started":
+      case "ongoing":
         return "bg-blue-100 text-blue-800";
+      case "started":
+        return "bg-green-100 text-green-800";
       case "completed":
         return "bg-gray-100 text-gray-800";
       default:
@@ -93,10 +95,30 @@ export default function TablePanel({
             <div>
               <strong>最大プレイヤー数:</strong> {table.max_players || 6}
             </div>
+            
+            {/* プレイヤー一覧 */}
+            {table.players && table.players.length > 0 && (
+              <div>
+                <strong>参加プレイヤー:</strong>
+                <div className="mt-2 space-y-1">
+                  {table.players.map((player) => (
+                    <div key={player.id} className="flex items-center justify-between bg-gray-50 px-2 py-1 rounded text-xs">
+                      <span>{player.username}</span>
+                      <button
+                        onClick={() => onJoinAsExistingUser(table.id, player.id)}
+                        className="px-2 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 transition-colors"
+                      >
+                        このユーザーとして入室
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="mt-4 space-y-3">
-            {table.status === "waiting" && (
+            {table.status === "ongoing" && (
               <div className="space-y-2">
                 <div>
                   <input
