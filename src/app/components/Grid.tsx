@@ -808,7 +808,7 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
       .from("tiles")
       .update({ placed: true })
       .eq("game_id", gameId)
-      .eq("id", tileId);
+      .eq("tile_kind", tileId);
 
     if (error) {
       console.error("タイル配置エラー:", error);
