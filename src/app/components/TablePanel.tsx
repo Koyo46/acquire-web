@@ -23,9 +23,9 @@ export default function TablePanel({
   const getStatusText = (status: string) => {
     switch (status) {
       case "ongoing":
-        return "進行中";
+        return "準備中";
       case "started":
-        return "開始済み";
+        return "開始済";
       case "completed":
         return "終了";
       default:
@@ -72,7 +72,7 @@ export default function TablePanel({
             {getStatusText(table.status)}
           </span>
         </div>
-        
+
         <div className="flex justify-between items-center text-sm text-gray-600">
           <span>
             プレイヤー: {table.current_players || 0}/{table.max_players || 6}
@@ -97,7 +97,7 @@ export default function TablePanel({
             <div>
               <strong>最大プレイヤー数:</strong> {table.max_players || 6}
             </div>
-            
+
             {/* プレイヤー一覧 */}
             {table.players && table.players.length > 0 && (
               <div>
@@ -141,14 +141,14 @@ export default function TablePanel({
                 </div>
               </div>
             )}
-            
+
             <button
               onClick={() => onJoinAsSpectator(table.id)}
               className="w-full px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 transition-colors"
             >
               観戦者として参加
             </button>
-            
+
             <button
               onClick={() => onDeleteTable(table.id)}
               className="w-full px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors"

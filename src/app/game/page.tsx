@@ -81,6 +81,45 @@ function GamePageContent({
     };
 
     fetchGameData();
+
+    // game_playersテーブルの変更を監視
+    const channel = supabase
+      .channel(`game_players_${gameId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'game_players',
+          filter: `game_id=eq.${gameId}`
+        },
+        async () => {
+          console.log('game_players テーブル変更検知 - game/page.tsx');
+          // プレイヤーリストを再取得
+          const fetchGamePlayers = async (gameId: string) => {
+            const { data, error } = await supabase
+              .from("game_players")
+              .select("player_id")
+              .eq("game_id", gameId);
+
+            if (error) {
+              console.error("プレイヤーリスト取得エラー:", error);
+              return [];
+            }
+
+            return data.map(({ player_id }) => player_id);
+          };
+
+          const updatedPlayerIds = await fetchGamePlayers(gameId);
+          console.log('プレイヤーリスト更新:', { 前: players, 後: updatedPlayerIds });
+          setPlayers(updatedPlayerIds);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [setGameId, setPlayers, router, gameId]);
 
   useEffect(() => {

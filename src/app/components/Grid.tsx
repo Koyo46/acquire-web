@@ -96,8 +96,8 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
     fetchData();
 
     const channel = supabase
-      .channel("tiles")
-      .on("postgres_changes", { event: "*", schema: "public", table: "tiles" }, async () => {
+      .channel(`tiles_${gameId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "tiles", filter: `game_id=eq.${gameId}` }, async () => {
         fetchData();
       })
       .subscribe();
@@ -118,8 +118,8 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
     fetchData();
 
     const channel = supabase
-      .channel("game_tables")
-      .on("postgres_changes", { event: "*", schema: "public", table: "game_tables" }, async () => {
+      .channel(`game_tables_${gameId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "game_tables", filter: `id=eq.${gameId}` }, async () => {
         const isGameStarted = await fetchGameStarted(gameId);
         setGameStarted(isGameStarted);
       })
@@ -174,8 +174,8 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
     fetchData(); // 初回ロード
 
     const channel = supabase
-      .channel("hands")
-      .on("postgres_changes", { event: "*", schema: "public", table: "hands" }, async () => {
+      .channel(`hands_${gameId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "hands", filter: `game_id=eq.${gameId}` }, async () => {
         fetchData();
       })
       .subscribe();
@@ -513,8 +513,8 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
     };
     fetchData();
     const channel = supabase
-      .channel("hotel_investors")
-      .on("postgres_changes", { event: "*", schema: "public", table: "hotel_investors" }, async () => {
+      .channel(`hotel_investors_${gameId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "hotel_investors", filter: `game_id=eq.${gameId}` }, async () => {
         const fetchedHotelInvestors = await fetchHotelInvestors(gameId);
         setHotelInvestors(fetchedHotelInvestors);
       })

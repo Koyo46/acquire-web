@@ -14,6 +14,27 @@ export default function TablesPage() {
 
   useEffect(() => {
     fetchTables();
+
+    // game_tablesテーブルの変更を監視
+    const channel = supabase
+      .channel('game_tables_list')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'game_tables'
+        },
+        () => {
+          console.log('game_tables テーブル変更検知 - テーブル一覧を更新');
+          fetchTables();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const fetchTables = async () => {
@@ -81,7 +102,7 @@ export default function TablesPage() {
       // ユーザーを作成
       const { data: newUser, error: insertError } = await supabase
         .from("users")
-        .insert({ username: playerName })
+        .insert({ username: playerName, balance: 6000 })
         .select("id")
         .single();
 
@@ -179,7 +200,28 @@ export default function TablesPage() {
         console.error("タイルデータ削除エラー:", tilesError);
       }
 
-      // 6. game_players
+      // 6. usersテーブルからこのゲームのプレイヤーを削除
+      // まずgame_playersから該当ゲームのプレイヤーIDを取得
+      const { data: gamePlayers, error: fetchPlayersError } = await supabase
+        .from("game_players")
+        .select("player_id")
+        .eq("game_id", tableId);
+
+      if (fetchPlayersError) {
+        console.error("プレイヤーID取得エラー:", fetchPlayersError);
+      } else if (gamePlayers && gamePlayers.length > 0) {
+        const playerIds = gamePlayers.map(gp => gp.player_id);
+        const { error: usersError } = await supabase
+          .from("users")
+          .delete()
+          .in("id", playerIds);
+
+        if (usersError) {
+          console.error("ユーザーデータ削除エラー:", usersError);
+        }
+      }
+
+      // 7. game_players
       const { error: gamePlayersError } = await supabase
         .from("game_players")
         .delete()
@@ -187,16 +229,6 @@ export default function TablesPage() {
 
       if (gamePlayersError) {
         console.error("ゲームプレイヤーデータ削除エラー:", gamePlayersError);
-      }
-
-      // 7. usersテーブルからこのゲームのプレイヤーを削除
-      const { error: usersError } = await supabase
-        .from("users")
-        .delete()
-        .eq("game_id", tableId);
-
-      if (usersError) {
-        console.error("ユーザーデータ削除エラー:", usersError);
       }
 
       // 8. 最後にgame_tablesを削除
@@ -231,7 +263,7 @@ export default function TablesPage() {
           id: gameId,
           status: "ongoing"
           // 現在のスキーマではtable_nameとmax_playersカラムがないため、statusのみ設定
-          // "ongoing": ゲーム進行中, "started": ゲーム開始済み
+          // "ongoing": ゲーム準備中, "started": ゲーム開始済
         })
         .select("id")
         .single();
@@ -301,7 +333,7 @@ export default function TablesPage() {
             </button>
           </div>
         ) : (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="flex flex-col gap-4">
             {tables.map((table) => (
               <TablePanel
                 key={table.id}

@@ -35,6 +35,7 @@ export default function GameBoard({ gameId, playerId, players }: { gameId: strin
   useEffect(() => {
     const fetchPlayerUsernames = async () => {
       if (players.length > 0) {
+        console.log('players変更検知 - ユーザー名取得開始:', players);
         const { data: usersData, error } = await supabase
           .from('users')
           .select('id, username')
@@ -48,6 +49,9 @@ export default function GameBoard({ gameId, playerId, players }: { gameId: strin
             username: `プレイヤー${id.slice(0, 8)}`
           }));
           setPlayersWithUsernames(playerObjects);
+          // 即座にstockStore更新
+          console.log('players変更 - 即座にstockStore更新:', playerObjects);
+          updateAll(gameId, playerObjects);
         } else {
           const playerObjects: Player[] = usersData.map(user => ({
             id: user.id,
@@ -55,12 +59,15 @@ export default function GameBoard({ gameId, playerId, players }: { gameId: strin
           }));
           setPlayersWithUsernames(playerObjects);
           console.log('プレイヤー情報取得成功:', playerObjects);
+          // 即座にstockStore更新
+          console.log('players変更 - 即座にstockStore更新:', playerObjects);
+          updateAll(gameId, playerObjects);
         }
       }
     };
     
     fetchPlayerUsernames();
-  }, [players]);
+  }, [players, gameId, updateAll]);
 
   useEffect(() => {
     const initializeData = async () => {
@@ -70,6 +77,7 @@ export default function GameBoard({ gameId, playerId, players }: { gameId: strin
     };
     initializeData();
   }, [gameId, playersWithUsernames, isInitialized, updateAll]);
+
 
   useEffect(() => {
     if (playersWithUsernames.length > 0) {

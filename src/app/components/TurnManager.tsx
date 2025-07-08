@@ -75,8 +75,8 @@ export default function TurnManager({ gameId, playerId }: { gameId: string, play
     fetchGameStatus();
 
     const channel = supabase
-      .channel("game_tables_turn_manager")
-      .on("postgres_changes", { event: "*", schema: "public", table: "game_tables" }, async () => {
+      .channel(`game_tables_turn_manager_${gameId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "game_tables", filter: `id=eq.${gameId}` }, async () => {
         console.log("🔍 ゲーム状態変更検知");
         await fetchGameStatus();
       })
