@@ -117,18 +117,16 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
     };
     fetchData();
 
-    const channel = supabase
-      .channel(`game_tables_${gameId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "game_tables", filter: `id=eq.${gameId}` }, async () => {
-        const isGameStarted = await fetchGameStarted(gameId);
-        setGameStarted(isGameStarted);
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    // リアルタイム監視はGameContextに一元化
+    // 初期状態のみ取得
   }, [gameId, fetchGameStarted]);
+
+  // GameContextのgameStartedを監視してローカル状態を更新
+  useEffect(() => {
+    if (gameStarted !== undefined) {
+      setGameStarted(gameStarted);
+    }
+  }, [gameStarted]);
 
   const fetchTileKindById = useCallback(async (gameId: string, tileId: number) => {
     const { data, error } = await supabase
@@ -261,8 +259,10 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
         }
       }
     }
+    // ゲーム開始時は最初のプレイヤーをターンに設定
+    const firstPlayerId = players[0];
     if (endTurn) {
-      await endTurn(nextPlayerId);
+      await endTurn(firstPlayerId);
     }
     await supabase.from("game_tables").update({ status: "started" }).eq("id", gameId);
     await supabase.from("users").update({ balance: 6000 }).eq("game_id", gameId);
@@ -968,9 +968,12 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
 
   const handleDrawAndEndTurn = async (currentPlayerId: string, nextPlayerId: string) => {
     try {
+      console.log("ターン終了処理開始:", { currentPlayerId, nextPlayerId });
       await drawTilesUntil6(currentPlayerId); // タイル補充
       if (endTurn) {
+        console.log("endTurn実行前:", currentTurn);
         await endTurn(nextPlayerId); // ターンエンド
+        console.log("endTurn実行後、期待値:", nextPlayerId);
         // ターン終了後に自分のターンではなくなる
         if (currentPlayerId === playerId) {
           setIsMyTurn(false);

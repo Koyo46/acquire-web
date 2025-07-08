@@ -48,18 +48,22 @@ export default function TurnManager({ gameId, playerId }: { gameId: string, play
 
   // 現在のターンプレイヤーの名前を更新
   useEffect(() => {
+    console.log("TurnManager - currentTurn changed:", currentTurn);
+    console.log("TurnManager - players:", players);
     if (currentTurn && players.length > 0) {
       const currentPlayer = players.find(player => player.id === currentTurn);
+      console.log("TurnManager - currentPlayer:", currentPlayer);
       setCurrentPlayerName(currentPlayer?.username || "不明なプレイヤー");
     }
   }, [currentTurn, players]);
 
-  // ゲーム状態の監視
+  // GameContextから状態を取得するため、独自の監視は不要
+  // ゲーム初期状態の取得のみ実行
   useEffect(() => {
     const fetchGameStatus = async () => {
       const { data, error } = await supabase
         .from("game_tables")
-        .select("status, current_turn")
+        .select("status")
         .eq("id", gameId)
         .single();
 
@@ -73,18 +77,6 @@ export default function TurnManager({ gameId, playerId }: { gameId: string, play
     };
 
     fetchGameStatus();
-
-    const channel = supabase
-      .channel(`game_tables_turn_manager_${gameId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "game_tables", filter: `id=eq.${gameId}` }, async () => {
-        console.log("🔍 ゲーム状態変更検知");
-        await fetchGameStatus();
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
   }, [gameId, setGameStarted]);
 
   const isMyTurn = currentTurn === playerId;

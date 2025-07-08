@@ -83,8 +83,18 @@ export const GameProvider = ({ gameId, children }: { gameId: string, children: R
       .channel(`game_tables_${gameId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "game_tables", filter: `id=eq.${gameId}` }, (payload: PostgresChangePayload) => {
         console.log("✅ Realtime 更新検知:", payload);
-        if (payload.new && payload.new.current_turn) {
-          setCurrentTurn(payload.new.current_turn);
+        console.log("Current Turn before:", currentTurn);
+        if (payload.new) {
+          // current_turnが存在する場合は更新（nullでも更新する）
+          if (payload.new.hasOwnProperty('current_turn')) {
+            console.log("Current Turn after:", payload.new.current_turn);
+            setCurrentTurn(payload.new.current_turn);
+          }
+          // statusが存在する場合は更新
+          if (payload.new.status) {
+            console.log("Status updated:", payload.new.status);
+            setGameStarted(payload.new.status === "started");
+          }
         }
       })
       .subscribe();
