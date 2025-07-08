@@ -6,6 +6,7 @@ import { useGame } from "@/src/app/contexts/GameContext";
 import { getDividendByHotelName, getStockPriceByHotelName } from "@/src/utils/hotelStockBoard";
 import { calculateTopInvestors } from "@/src/utils/calculateTopInvestors";
 import { hotelColors, hotelImages } from "@/src/utils/constants";
+import { isDevelopment, generateDevTileOrder } from "@/src/utils/environment";
 import GameBoard from "./grid/GameBoard";
 import PlayerHand from "./grid/PlayerHand";
 import HotelList from "./grid/HotelList";
@@ -213,10 +214,12 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
   }, [establishedHotels]);
 
   const dealTiles = async () => {
+    console.log("dealTiles 実行開始:", { gameId, players });
+    
     // 空いているタイルを取得
     const { data: availableTiles, error } = await supabase
       .from("tiles")
-      .select("id")
+      .select("id, tile_kind")
       .eq("game_id", gameId)
       .eq("placed", false)
       .eq("dealed", false);
@@ -226,39 +229,104 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
       return;
     }
 
-    for (let i = 0; i < players.length; i++) {
-      for (let j = 0; j < 6; j++) {
-        // ランダムに1枚補充を試みる
-        let newTile;
-        do {
-          newTile = availableTiles.sort(() => Math.random() - 0.5)[0];
-          if (newTile) {
-            availableTiles.splice(availableTiles.indexOf(newTile), 1);
+    console.log("利用可能なタイル数:", availableTiles?.length);
+
+    // 開発環境の場合は事前定義されたタイル配布パターンを使用
+    if (isDevelopment()) {
+      console.log("開発環境: 事前定義されたタイル配布パターンを使用");
+      const devTileOrder = generateDevTileOrder(players.length);
+      let tileIndex = 0;
+
+      for (let i = 0; i < players.length; i++) {
+        for (let j = 0; j < 6; j++) {
+          if (tileIndex >= devTileOrder.length) {
+            console.log("タイル配布パターンが終了:", tileIndex);
+            break;
           }
-        } while (!newTile);
+          
+          const targetTileKind = devTileOrder[tileIndex];
+          // "1A" -> { col: 1, row: "A" } に変換してtile_kind（数値）に変換
+          const col = parseInt(targetTileKind.match(/\d+/)?.[0] || "0");
+          const row = targetTileKind.match(/[A-I]/)?.[0] || "A";
+          const targetTileKindNumber = positionToTileKind(col, row);
+          const targetTile = availableTiles.find(tile => tile.tile_kind === targetTileKindNumber);
+          
+          console.log(`プレイヤー${i+1}に配布中:`, {
+            tileIndex,
+            targetTileKind,
+            targetTileKindNumber,
+            targetTile: targetTile ? targetTile.id : 'なし',
+            playerId: players[i]
+          });
+          
+          if (targetTile) {
+            // 手牌に追加
+            const { error: insertError } = await supabase
+              .from("hands")
+              .insert({ game_id: gameId, player_id: players[i], tile_id: targetTile.id });
 
+            if (insertError) {
+              console.error("手牌追加エラー:", insertError);
+            } else {
+              console.log("手牌追加成功:", { playerId: players[i], tileId: targetTile.id });
+            }
 
-        // 手牌に追加
-        const { error: insertError } = await supabase
-          .from("hands")
-          .insert({ game_id: gameId, player_id: players[i], tile_id: newTile.id });
+            // タイルを配付済みにする
+            const { error: updateError } = await supabase
+              .from("tiles")
+              .update({ dealed: true })
+              .eq("game_id", gameId)
+              .eq("id", targetTile.id);
 
-        if (insertError) {
-          console.error("手牌追加エラー:", insertError);
+            if (updateError) {
+              console.error("タイル配付エラー:", updateError);
+            }
+
+            // 使用済みタイルを配列から削除
+            availableTiles.splice(availableTiles.indexOf(targetTile), 1);
+          } else {
+            console.warn("タイルが見つかりません:", targetTileKind);
+          }
+          tileIndex++;
         }
+      }
+    } else {
+      // 本番環境の場合は従来のランダム配布を使用
+      console.log("本番環境: ランダムタイル配布を使用");
+      for (let i = 0; i < players.length; i++) {
+        for (let j = 0; j < 6; j++) {
+          // ランダムに1枚補充を試みる
+          let newTile;
+          do {
+            newTile = availableTiles.sort(() => Math.random() - 0.5)[0];
+            if (newTile) {
+              availableTiles.splice(availableTiles.indexOf(newTile), 1);
+            }
+          } while (!newTile);
 
-        // タイルを配付済みにする
-        const { error: updateError } = await supabase
-          .from("tiles")
-          .update({ dealed: true })
-          .eq("game_id", gameId)
-          .eq("id", newTile.id);
+          // 手牌に追加
+          const { error: insertError } = await supabase
+            .from("hands")
+            .insert({ game_id: gameId, player_id: players[i], tile_id: newTile.id });
 
-        if (updateError) {
-          console.error("タイル配付エラー:", updateError);
+          if (insertError) {
+            console.error("手牌追加エラー:", insertError);
+          }
+
+          // タイルを配付済みにする
+          const { error: updateError } = await supabase
+            .from("tiles")
+            .update({ dealed: true })
+            .eq("game_id", gameId)
+            .eq("id", newTile.id);
+
+          if (updateError) {
+            console.error("タイル配付エラー:", updateError);
+          }
         }
       }
     }
+    
     // ゲーム開始時は最初のプレイヤーをターンに設定
     const firstPlayerId = players[0];
     if (endTurn) {
