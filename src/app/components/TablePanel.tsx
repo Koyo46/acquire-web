@@ -142,19 +142,21 @@ export default function TablePanel({
               </div>
             )}
 
-            <button
-              onClick={() => onJoinAsSpectator(table.id)}
-              className="w-full px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 transition-colors"
-            >
-              観戦者として参加
-            </button>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => onJoinAsSpectator(table.id)}
+                className="px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 transition-colors"
+              >
+                観戦者として参加
+              </button>
 
-            <button
-              onClick={() => onDeleteTable(table.id)}
-              className="w-full px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors"
-            >
-              テーブルを削除
-            </button>
+              <button
+                onClick={() => onDeleteTable(table.id)}
+                className="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors"
+              >
+                テーブルを削除
+              </button>
+            </div>
           </div>
         </div>
       )}
