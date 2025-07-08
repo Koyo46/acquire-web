@@ -32,6 +32,7 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
   // 開発中は自由配置可能
   const [freePlacementMode, setFreePlacementMode] = useState(false);
   const [stocksBoughtThisTurn, setStocksBoughtThisTurn] = useState(0);
+  const [canPurchaseStock, setCanPurchaseStock] = useState(false);
   
   // ゲームログ関連の状態を削除
 
@@ -199,6 +200,19 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
     // stockValue: number; // J-Stock の価格
     // tier: "low" | "medium" | "high";
   }[]>([]);
+
+  // 株券購入可能状態を更新
+  useEffect(() => {
+    const updateCanPurchaseStock = async () => {
+      if (isMyTurn && putTile) {
+        const result = await checkStockPurchasePossible();
+        setCanPurchaseStock(result);
+      } else {
+        setCanPurchaseStock(false);
+      }
+    };
+    updateCanPurchaseStock();
+  }, [isMyTurn, putTile, stocksBoughtThisTurn, establishedHotels]);
 
   const completeHotelList = useMemo(() => {
     const allHotels = ["空", "雲", "晴", "霧", "雷", "嵐", "雨"]; // すべてのホテル名
@@ -1034,9 +1048,71 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
     setSelectedTile(null);
   };
 
+
+  // 株券購入可能かチェックする関数
+  const checkStockPurchasePossible = async () => {
+    if (stocksBoughtThisTurn >= 3) {
+      return false;
+    }
+    
+    try {
+      // プレイヤーの所持金を取得
+      const { data: userData } = await supabase
+        .from("users")
+        .select("balance")
+        .eq("id", playerId)
+        .single();
+      
+      if (!userData) return false;
+      
+      const userBalance = userData.balance;
+      
+      // 存在するホテルのうち、購入可能な株券があるかチェック
+      for (const hotel of establishedHotels) {
+        const stockPrice = await getStockPriceByHotelName(hotel.name);
+        
+        if (userBalance >= stockPrice) {
+          // 株券の発行上限をチェック
+          const { data: totalSharesData } = await supabase
+            .from("hotel_investors")
+            .select("shares")
+            .eq("hotel_name", hotel.name)
+            .eq("game_id", gameId);
+          
+          const totalShares = totalSharesData?.reduce((sum, investor) => sum + investor.shares, 0) || 0;
+          
+          if (totalShares < 25) {
+            return true;
+          }
+        }
+      }
+      
+      return false;
+    } catch (error) {
+      console.error("株券購入可能チェックエラー:", error);
+      return false;
+    }
+  };
+
   const handleDrawAndEndTurn = async (currentPlayerId: string, nextPlayerId: string) => {
     try {
       console.log("ターン終了処理開始:", { currentPlayerId, nextPlayerId });
+      
+      // ホテル設立中の場合はターン終了を中断
+      if (bornNewHotel) {
+        alert("ホテル設立可能なタイルがあります。先にホテル設立を確定してください。");
+        return; // 処理を中断
+      }
+      
+      // 株券購入可能かチェック
+      const canPurchaseStock = await checkStockPurchasePossible();
+      if (canPurchaseStock) {
+        const confirmSkip = confirm("株券が購入可能ですがスキップしてもよろしいですか？");
+        if (!confirmSkip) {
+          return; // 処理を中断
+        }
+      }
+      
       await drawTilesUntil6(currentPlayerId); // タイル補充
       if (endTurn) {
         console.log("endTurn実行前:", currentTurn);
@@ -1420,6 +1496,7 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
         bornNewHotel={bornNewHotel}
         handleBuyStock={handleBuyStock}
         handleHotelSelection={handleHotelSelection}
+        canPurchaseStock={canPurchaseStock}
       />
 
       <div className="mt-4 p-4 bg-white shadow rounded w-full max-w-screen-md">

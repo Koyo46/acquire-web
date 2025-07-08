@@ -10,6 +10,7 @@ interface HotelListProps {
   bornNewHotel: boolean;
   handleBuyStock: (hotelName: string) => void;
   handleHotelSelection: (index: number, hotelName: string) => void;
+  canPurchaseStock: boolean;
 }
 
 export default function HotelList({
@@ -19,6 +20,7 @@ export default function HotelList({
   bornNewHotel,
   handleBuyStock,
   handleHotelSelection,
+  canPurchaseStock,
 }: HotelListProps) {
   return (
     <div className="mt-4 p-4 bg-white shadow rounded w-full max-w-screen-md">
@@ -33,7 +35,7 @@ export default function HotelList({
               className="object-contain mr-2"
             />
             <span>{hotel.name}</span>
-            {(putTile && isMyTurn && hotel.tiles > 0 && !bornNewHotel) && (
+            {(putTile && isMyTurn && hotel.tiles > 0 && !bornNewHotel && canPurchaseStock) && (
               <button 
                 className="ml-2 px-2 py-1 bg-white rounded text-sm"
                 onClick={() => handleBuyStock(hotel.name)}
