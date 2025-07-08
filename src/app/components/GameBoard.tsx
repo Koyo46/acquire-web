@@ -88,10 +88,9 @@ export default function GameBoard({ gameId, playerId, players }: { gameId: strin
     }
   }, [gameId, playersWithUsernames, subscribeToChanges]);
   
-  // ゲームログを取得する関数をより頻繁に呼び出し、デバッグ情報を追加
+  // ゲームログを取得する関数
   const fetchGameLogs = async () => {
     try {
-      console.log("ゲームログの取得を試行 - gameId:", gameId);
       const { data, error } = await supabase
         .from('game_logs')
         .select('*')
@@ -105,7 +104,6 @@ export default function GameBoard({ gameId, playerId, players }: { gameId: strin
       }
       
       if (data) {
-        console.log(`ゲームログ ${data.length}件 取得成功:`, data.slice(0, 3)); // 最新3件のみ表示
         const formattedLogs = data.map(log => ({
           id: log.id,
           type: log.log_type,
@@ -113,6 +111,11 @@ export default function GameBoard({ gameId, playerId, players }: { gameId: strin
           timestamp: new Date(log.timestamp).getTime(),
           data: log.data
         }));
+        
+        // 実際にログが変更された場合のみログ出力
+        if (JSON.stringify(formattedLogs) !== JSON.stringify(gameLogs)) {
+          console.log(`ゲームログ ${data.length}件 取得成功:`, data.slice(0, 3));
+        }
         
         setGameLogs(formattedLogs);
       }

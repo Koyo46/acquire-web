@@ -1,4 +1,5 @@
 "use client";
+import { useEffect, useRef } from "react";
 import { useStockStore } from "@/src/store/stockStore";
 
 const hotelColors: { [key: string]: string } = {
@@ -13,8 +14,15 @@ const hotelColors: { [key: string]: string } = {
 
 export default function PlayerStatus() {
   const playerStatuses = useStockStore((state) => state.playerStatuses);
-  console.log("playerStatuses", playerStatuses);
   const isInitialized = useStockStore((state) => state.isInitialized);
+  const prevPlayerStatuses = useRef(playerStatuses);
+
+  useEffect(() => {
+    if (JSON.stringify(prevPlayerStatuses.current) !== JSON.stringify(playerStatuses)) {
+      console.log("playerStatuses", playerStatuses);
+      prevPlayerStatuses.current = playerStatuses;
+    }
+  }, [playerStatuses]);
   const allHotels = ["空", "雲", "晴", "霧", "雷", "嵐", "雨"];
 
   if (!isInitialized) {
