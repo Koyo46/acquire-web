@@ -285,6 +285,18 @@ export default function TablesPage() {
         return;
       }
 
+      // 6.5. game_tablesのcurrent_turnをNULLに更新（users削除前に必須）
+      const { error: updateCurrentTurnError } = await supabase
+        .from("game_tables")
+        .update({ current_turn: null })
+        .eq("id", tableId);
+
+      if (updateCurrentTurnError) {
+        console.error("current_turn更新エラー:", updateCurrentTurnError);
+        alert("current_turn更新に失敗しました");
+        return;
+      }
+
       const { error: gamePlayersError } = await supabase
         .from("game_players")
         .delete()
