@@ -456,7 +456,7 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
   };
 
   const handleTilePlacement = async (col: number, row: string) => {
-    if (confirming) return; // 確定待ちのときは配置できない
+    if (confirming || putTile) return; // 確定待ちまたはタイル配置済みのときは配置できない
 
     setPendingTile({ col, row }); // 配置予定のタイルを保存
     setConfirming(true); // 確定ボタンを表示
