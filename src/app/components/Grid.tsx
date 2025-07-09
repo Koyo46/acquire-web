@@ -10,6 +10,7 @@ import { isDevelopment, generateDevTileOrder } from "@/src/utils/environment";
 import GameBoard from "./grid/GameBoard";
 import PlayerHand from "./grid/PlayerHand";
 import HotelList from "./grid/HotelList";
+import { TilePlacementConfirmModal } from "./TilePlacementConfirmModal";
 
 export default function Grid({ gameId, playerId, players }: { gameId: string, playerId: string, players: string[] }) {
 
@@ -20,6 +21,13 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
   const [playerHand, setPlayerHand] = useState<number[]>([]);
   const [pendingTile, setPendingTile] = useState<{ col: number; row: string } | null>(null);
   const [confirming, setConfirming] = useState(false);
+  const [pendingMergeInfo, setPendingMergeInfo] = useState<{
+    mergingHotels: { id: number; name: string; tiles: { col: number; row: string }[] }[];
+    survivingHotel: { id: number; name: string; tiles: { col: number; row: string }[] };
+    cannotMerge: boolean;
+    largeHotels?: { id: number; name: string; tiles: { col: number; row: string }[] }[];
+  } | null>(null);
+  const [selectedMergeDirection, setSelectedMergeDirection] = useState(0); // 0: デフォルト, 1: 交換
   const gameContext = useGame();
   const { currentTurn, endTurn, fetchGameStarted } = gameContext || {};
   const { setMergingHotels, setPreMergeHotelData, setCurrentMergingHotel, setMergingPlayersQueue, setCurrentMergingPlayer } = gameContext || {};
@@ -458,6 +466,11 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
   const handleTilePlacement = async (col: number, row: string) => {
     if (confirming || putTile) return; // 確定待ちまたはタイル配置済みのときは配置できない
 
+    // 合併をシミュレート
+    const mergeInfo = simulateTilePlacement(col, row);
+    setPendingMergeInfo(mergeInfo);
+    setSelectedMergeDirection(0); // デフォルトの方向にリセット
+
     setPendingTile({ col, row }); // 配置予定のタイルを保存
     setConfirming(true); // 確定ボタンを表示
   };
@@ -467,6 +480,12 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
   const cancelTilePlacement = () => {
     setPendingTile(null);
     setConfirming(false);
+    setPendingMergeInfo(null);
+    setSelectedMergeDirection(0);
+  };
+
+  const swapMergeDirection = () => {
+    setSelectedMergeDirection(prev => prev === 0 ? 1 : 0);
   };
 
   // ホテル選択モーダルの状態
@@ -668,8 +687,62 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
     return adjacentTiles;
   };
 
+  // タイル配置をシミュレートして合併情報を取得
+  const simulateTilePlacement = (col: number, row: string) => {
+    const adjacentTiles = getAdjacentTiles(col, row);
+    const adjacentPlacedTiles = adjacentTiles.filter((tile) =>
+      placedTiles.some((t) => t.col === tile.col && t.row === tile.row)
+    );
+
+    // 既存のホテルを検索
+    const foundAdjacentHotels = establishedHotels.filter((hotel) =>
+      hotel.tiles.some((tile) =>
+        adjacentPlacedTiles.some((adjTile) => tile.col === adjTile.col && tile.row === adjTile.row)
+      )
+    );
+
+    // 合併が発生しない場合
+    if (foundAdjacentHotels.length <= 1) {
+      return null;
+    }
+
+    // サイズ11以上のホテルが2つ以上ある場合
+    const largeHotels = foundAdjacentHotels.filter(hotel => hotel.tiles.length >= 11);
+    if (largeHotels.length >= 2) {
+      return {
+        mergingHotels: [],
+        survivingHotel: largeHotels[0],
+        cannotMerge: true,
+        largeHotels
+      };
+    }
+
+    // 合併が発生する場合
+    const largestHotel = foundAdjacentHotels.reduce((prev, current) =>
+      prev.tiles.length > current.tiles.length ? prev : current
+    );
+    const mergingHotels = foundAdjacentHotels.filter(hotel => hotel.name !== largestHotel.name);
+
+    return {
+      mergingHotels,
+      survivingHotel: largestHotel,
+      cannotMerge: false
+    };
+  };
+
   // タイルをクリックしたときの処理
-  const placeTileOnBoard = async (gameId: string, col: number, row: string) => {
+  const placeTileOnBoard = async (
+    gameId: string, 
+    col: number, 
+    row: string,
+    mergeInfo?: {
+      mergingHotels: { id: number; name: string; tiles: { col: number; row: string }[] }[];
+      survivingHotel: { id: number; name: string; tiles: { col: number; row: string }[] };
+      cannotMerge: boolean;
+      largeHotels?: { id: number; name: string; tiles: { col: number; row: string }[] }[];
+    } | null,
+    mergeDirection?: number
+  ) => {
     if (!gameId) return;
 
     const newTile = { col, row };
@@ -731,9 +804,19 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
       ]);
       const uniqueMergedTiles = Array.from(new Set(mergedTiles));
 
-      const largestHotel = foundAdjacentHotels.reduce((prev, current) =>
+      let largestHotel = foundAdjacentHotels.reduce((prev, current) =>
         prev.tiles.length > current.tiles.length ? prev : current
       );
+      
+      // 同サイズのホテルがある場合、合併方向を考慮
+      if (mergeInfo && mergeDirection === 1) {
+        const sameSizeHotels = foundAdjacentHotels.filter(hotel => hotel.tiles.length === largestHotel.tiles.length);
+        if (sameSizeHotels.length > 1) {
+          // 合併方向を交換（mergeDirection === 1の場合）
+          largestHotel = sameSizeHotels.find(hotel => hotel.id !== largestHotel.id) || largestHotel;
+        }
+      }
+      
       console.log(largestHotel);
       console.log("foundAdjacentHotels", foundAdjacentHotels);
       const hotelsToProcess = foundAdjacentHotels.filter(hotel => hotel.name !== largestHotel.name);
@@ -815,10 +898,23 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
       }
 
       // 合併後のホテル情報を更新
+      // 合併されるすべてのホテルのタイルを収集
+      const allMergedTiles = [
+        newTile,
+        ...adjacentPlacedTiles,
+        ...foundAdjacentHotels.flatMap(hotel => hotel.tiles)
+      ];
+      
+      // 重複を除去
+      const uniqueTiles = allMergedTiles.filter((tile, index, self) => 
+        index === self.findIndex(t => t.col === tile.col && t.row === tile.row)
+      );
+      
       const updatedLargestHotel = {
         ...largestHotel,
-        tiles: [...largestHotel.tiles, newTile, ...adjacentPlacedTiles]
+        tiles: uniqueTiles
       };
+      
       updatedHotels = updatedHotels.map(h =>
         h.id === largestHotel.id ? updatedLargestHotel : h
       ).filter(h => !hotelsToProcess.some(sh => sh.id === h.id));
@@ -858,23 +954,12 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
   const confirmTilePlacement = async () => {
     if (!pendingTile) return;
 
-    const tileId = positionToTileKind(pendingTile.col, pendingTile.row);
-    // 既存のホテルを検索
-    const adjacentTiles = getAdjacentTiles(pendingTile.col, pendingTile.row);
-    const adjacentPlacedTiles = adjacentTiles.filter((tile) =>
-      placedTiles.some((t) => t.col === tile.col && t.row === tile.row)
-    );
-    const updatedHotels = [...establishedHotels];
-    const foundAdjacentHotels = updatedHotels.filter((hotel) =>
-      hotel.tiles.some((tile) =>
-        adjacentPlacedTiles.some((adjTile) => tile.col === adjTile.col && tile.row === adjTile.row)
-      )
-    );
-    const hotelsWithMoreThan11Tiles = foundAdjacentHotels.filter(hotel => hotel.tiles.length >= 11);
-    if (hotelsWithMoreThan11Tiles.length >= 2) {
-      alert("タイルを配置できません");
+    // 配置不可の場合は処理を中断
+    if (pendingMergeInfo?.cannotMerge) {
       return;
     }
+
+    const tileId = positionToTileKind(pendingTile.col, pendingTile.row);
     
     // ユーザー名を取得してログに使用
     const { data: userInfo } = await supabase
@@ -909,11 +994,15 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
     
     // 状態をリセット（先にポップアップを非表示にする）
     const tileCopy = { ...pendingTile };
+    const mergeInfoCopy = pendingMergeInfo;
+    const mergeDirectionCopy = selectedMergeDirection;
     setPendingTile(null);
     setConfirming(false);
+    setPendingMergeInfo(null);
+    setSelectedMergeDirection(0);
     
-    // その後タイルの配置処理を実行
-    await placeTileOnBoard(gameId, tileCopy.col, tileCopy.row);
+    // その後タイルの配置処理を実行（合併方向情報を渡す）
+    await placeTileOnBoard(gameId, tileCopy.col, tileCopy.row, mergeInfoCopy, mergeDirectionCopy);
 
     setPutTile(true);
   };
@@ -1454,27 +1543,14 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
         tileKindToPosition={tileKindToPosition}
       />
 
-      {confirming && pendingTile && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center pt-80 z-50">
-          <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
-            <h3 className="text-lg font-bold mb-4">配置を確定しますか？</h3>
-            <div className="flex gap-4 justify-end">
-              <button
-                className="px-6 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors"
-                onClick={confirmTilePlacement}
-              >
-                確定する
-              </button>
-              <button
-                className="px-6 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
-                onClick={cancelTilePlacement}
-              >
-                キャンセル
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <TilePlacementConfirmModal
+        isOpen={confirming && pendingTile !== null}
+        mergeInfo={pendingMergeInfo}
+        selectedMergeDirection={selectedMergeDirection}
+        onConfirm={confirmTilePlacement}
+        onCancel={cancelTilePlacement}
+        onSwapMergeDirection={swapMergeDirection}
+      />
 
       {/* マージが発生した場合に表示されるポップアップ */}
       {gameContext?.mergingHotels && gameContext.mergingHotels.length > 0 && gameContext.currentMergingPlayer !== playerId && <MergePopup />}
