@@ -42,6 +42,7 @@ type StockState = {
   fetchHotels: (gameId: string) => Promise<void>;
   fetchHotelInvestors: (gameId: string) => Promise<void>;
   fetchPlayerStatuses: (gameId: string, players: Player[]) => Promise<void>;
+  fetchGamePlayers: (gameId: string) => Promise<Player[]>;
   updateAll: (gameId: string, players: Player[]) => Promise<void>;
   subscribeToChanges: (gameId: string, players: Player[]) => () => void;
 };
@@ -95,6 +96,7 @@ export const useStockStore = create<StockState>((set, get) => ({
 
   fetchPlayerStatuses: async (gameId: string, players: Player[]) => {
     try {
+      console.log('fetchPlayerStatuses 実行開始:', { gameId, players });
       if (!players || players.length === 0) {
         throw new Error('プレイヤー情報がありません');
       }
@@ -154,10 +156,42 @@ export const useStockStore = create<StockState>((set, get) => ({
         };
       });
 
+      console.log('PlayerStatus 更新完了:', playerStatuses);
       set({ playerStatuses, error: null });
     } catch (error) {
       console.error('プレイヤーステータス取得エラー:', error instanceof Error ? error.message : '不明なエラー');
       set({ error: error instanceof Error ? error : new Error('不明なエラー'), playerStatuses: [] });
+    }
+  },
+
+  fetchGamePlayers: async (gameId: string) => {
+    try {
+      const { data: gamePlayersData, error } = await supabase
+        .from('game_players')
+        .select('player_id')
+        .eq('game_id', gameId);
+
+      if (error) {
+        console.error('プレイヤーリスト取得エラー:', error);
+        return [];
+      }
+
+      const playerIds = gamePlayersData.map(({ player_id }) => player_id);
+      
+      const { data: usersData, error: usersError } = await supabase
+        .from('users')
+        .select('id, username')
+        .in('id', playerIds);
+
+      if (usersError) {
+        console.error('ユーザー情報取得エラー:', usersError);
+        return [];
+      }
+
+      return usersData.map(user => ({ id: user.id, username: user.username }));
+    } catch (error) {
+      console.error('プレイヤー取得エラー:', error);
+      return [];
     }
   },
 
@@ -183,24 +217,43 @@ export const useStockStore = create<StockState>((set, get) => ({
 
   subscribeToChanges: (gameId: string, players: Player[]) => {
     const hotelChannel = supabase
-      .channel('hotel_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'hotels' }, () => {
+      .channel(`hotel_changes_${gameId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'hotels', filter: `game_id=eq.${gameId}` }, () => {
         get().fetchHotels(gameId);
       })
       .subscribe();
 
     const investorChannel = supabase
-      .channel('investor_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'hotel_investors' }, () => {
+      .channel(`investor_changes_${gameId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'hotel_investors', filter: `game_id=eq.${gameId}` }, async () => {
+        console.log('hotel_investors テーブル変更検知 - 最新プレイヤーリストで更新');
         get().fetchHotelInvestors(gameId);
-        get().fetchPlayerStatuses(gameId, players);
+        // 最新のプレイヤーリストを取得してからPlayerStatusを更新
+        const latestPlayers = await get().fetchGamePlayers(gameId);
+        console.log('investors変更時の最新プレイヤーリスト:', latestPlayers);
+        get().fetchPlayerStatuses(gameId, latestPlayers);
       })
       .subscribe();
 
     const userChannel = supabase
-      .channel('user_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, () => {
-        get().fetchPlayerStatuses(gameId, players);
+      .channel(`user_changes_${gameId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, async () => {
+        console.log('users テーブル変更検知 - 最新プレイヤーリストで更新');
+        // 最新のプレイヤーリストを取得してからPlayerStatusを更新
+        const latestPlayers = await get().fetchGamePlayers(gameId);
+        console.log('users変更時の最新プレイヤーリスト:', latestPlayers);
+        get().fetchPlayerStatuses(gameId, latestPlayers);
+      })
+      .subscribe();
+
+    const gamePlayersChannel = supabase
+      .channel(`game_players_changes_${gameId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'game_players', filter: `game_id=eq.${gameId}` }, async () => {
+        console.log('game_players テーブル変更検知 - プレイヤーリスト更新実行');
+        // プレイヤーリストを最新に更新してからPlayerStatusを更新
+        const latestPlayers = await get().fetchGamePlayers(gameId);
+        console.log('最新プレイヤーリスト取得:', latestPlayers);
+        get().fetchPlayerStatuses(gameId, latestPlayers);
       })
       .subscribe();
 
@@ -208,6 +261,7 @@ export const useStockStore = create<StockState>((set, get) => ({
       hotelChannel.unsubscribe();
       investorChannel.unsubscribe();
       userChannel.unsubscribe();
+      gamePlayersChannel.unsubscribe();
     };
   }
 })); 

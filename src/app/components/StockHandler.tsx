@@ -47,23 +47,23 @@ export default function StockHandler({ gameId, playerId, players }: { gameId: st
 
       if (data && data.merge_state) {
         const mergeState = data.merge_state;
-        
+
         if (setMergingHotels && mergeState.merging_hotels) {
           setMergingHotels(mergeState.merging_hotels);
         }
-        
+
         if (setPreMergeHotelData && mergeState.pre_merge_hotel_data) {
           setPreMergeHotelData(mergeState.pre_merge_hotel_data);
         }
-        
+
         if (setMergingPlayersQueue && mergeState.players_queue) {
           setMergingPlayersQueue(mergeState.players_queue);
         }
-        
+
         if (setCurrentMergingPlayer) {
           setCurrentMergingPlayer(mergeState.current_player);
         }
-        
+
         if (setCurrentMergingHotel) {
           setCurrentMergingHotel(mergeState.current_merging_hotel);
         }
@@ -76,7 +76,7 @@ export default function StockHandler({ gameId, playerId, players }: { gameId: st
   useEffect(() => {
     const checkShares = async () => {
       if (!currentMergingHotel) return;
-      
+
       try {
         const { data: shareholderData } = await supabase
           .from("hotel_investors")
@@ -94,15 +94,15 @@ export default function StockHandler({ gameId, playerId, players }: { gameId: st
     };
 
     checkShares();
-    
+
     // 初回ロード時にDBからマージ状態を取得
     updateMergeStateFromDB();
 
     // マージ状態の変更を監視
     const channel = supabase
-      .channel("game_tables_merge_state")
-      .on("postgres_changes", 
-        { event: "*", schema: "public", table: "game_tables", filter: `id=eq.${gameId}` }, 
+      .channel(`game_tables_merge_${gameId}`)
+      .on("postgres_changes",
+        { event: "*", schema: "public", table: "game_tables", filter: `id=eq.${gameId}` },
         async (payload) => {
           console.log("マージ状態変更検知:", payload);
           // マージ状態が変更されたらDBから最新の状態を取得
@@ -129,7 +129,7 @@ export default function StockHandler({ gameId, playerId, players }: { gameId: st
 
     // 次の状態を計算
     let nextState;
-    
+
     if (newQueue.length > 0) {
       // 次のプレイヤーに移行
       nextState = {
@@ -143,7 +143,7 @@ export default function StockHandler({ gameId, playerId, players }: { gameId: st
     } else if (mergingHotels && mergingHotels.length > 1) {
       // 次の買収対象ホテルに移行
       const remainingHotels = mergingHotels.slice(1);
-      
+
       // 新しいホテルの株主を取得して処理キューを更新
       const { data: shareholders } = await supabase
         .from("hotel_investors")
@@ -157,11 +157,11 @@ export default function StockHandler({ gameId, playerId, players }: { gameId: st
         .select("current_turn")
         .eq("id", gameId)
         .single();
-        
+
       const currentTurn = gameData?.current_turn;
 
       const uniqueShareholders = [...new Set(shareholders?.map(s => s.user_id) || [])];
-      
+
       // プレイヤーの配列を現在のターンから開始するように並び替え
       let reorderedPlayers = [...players];
       if (currentTurn && players.includes(currentTurn)) {
@@ -171,7 +171,7 @@ export default function StockHandler({ gameId, playerId, players }: { gameId: st
           ...players.slice(0, currentTurnIndex)
         ];
       }
-      
+
       const orderedShareholders = uniqueShareholders.length > 0
         ? reorderedPlayers.filter(pid => uniqueShareholders.includes(pid))
         : reorderedPlayers; // 株主がいない場合は全プレイヤーを対象とする
@@ -195,13 +195,13 @@ export default function StockHandler({ gameId, playerId, players }: { gameId: st
         is_merging: false
       };
     }
-    
+
     // マージ状態をDBに保存
     const { error } = await supabase
       .from("game_tables")
       .update({ merge_state: nextState })
       .eq("id", gameId);
-      
+
     if (error) {
       console.error("マージ状態更新エラー:", error);
     }
@@ -209,22 +209,22 @@ export default function StockHandler({ gameId, playerId, players }: { gameId: st
 
   const sellShares = async (hotel: Hotel) => {
     if (!isCurrentPlayer) return;
-    
+
     // 株式を売却する処理
     if (shares > 0) {
       // 株価を取得
       const stockPrice = calculateStockPrice(
-        hotel.name, 
+        hotel.name,
         preMergeHotelData?.find(h => h.id === hotel.id)?.tileCount || 0
       );
-      
+
       // プレイヤーの所持金を更新
       const { data: userData } = await supabase
         .from("users")
         .select("balance")
         .eq("id", playerId)
         .single();
-        
+
       if (userData) {
         const newBalance = userData.balance + (stockPrice * shares);
         await supabase
@@ -232,7 +232,7 @@ export default function StockHandler({ gameId, playerId, players }: { gameId: st
           .update({ balance: newBalance })
           .eq("id", playerId);
       }
-      
+
       // 株式を削除
       await supabase
         .from("hotel_investors")
@@ -241,7 +241,7 @@ export default function StockHandler({ gameId, playerId, players }: { gameId: st
         .eq("user_id", playerId)
         .eq("hotel_name", hotel.name);
     }
-    
+
     // マージ処理を次に進める
     await handleMergeComplete();
   };
@@ -254,7 +254,7 @@ export default function StockHandler({ gameId, playerId, players }: { gameId: st
 
   const exchangeShares = async (hotel: Hotel) => {
     if (!isCurrentPlayer) return;
-    
+
     // 株式を2枚を1枚と交換する処理
     if (shares > 1 && mergingHotels && mergingHotels.length > 0) {
       // 大きいホテルを見つける
@@ -266,7 +266,7 @@ export default function StockHandler({ gameId, playerId, players }: { gameId: st
         .order("tile_ids", { ascending: false })
         .limit(1)
         .single();
-        
+
       if (largestHotel) {
         // 既存の株を確認
         const { data: existingShares } = await supabase
@@ -276,7 +276,7 @@ export default function StockHandler({ gameId, playerId, players }: { gameId: st
           .eq("user_id", playerId)
           .eq("hotel_name", largestHotel.hotel_name)
           .maybeSingle();
-          
+
         if (existingShares) {
           // 既存の株に追加
           await supabase
@@ -296,7 +296,7 @@ export default function StockHandler({ gameId, playerId, players }: { gameId: st
               shares: 1
             });
         }
-        
+
         // 古い株を削除
         await supabase
           .from("hotel_investors")
@@ -329,34 +329,31 @@ export default function StockHandler({ gameId, playerId, players }: { gameId: st
           </div>
           {(isCurrentPlayer) ? (
             <div className="flex gap-4 justify-end mt-4">
-              <button 
-                className={`px-6 py-2 rounded transition-colors ${
-                  shares > 0 
-                    ? "bg-green-500 text-white hover:bg-green-600" 
+              <button
+                className={`px-6 py-2 rounded transition-colors ${shares > 0
+                    ? "bg-green-500 text-white hover:bg-green-600"
                     : "bg-gray-300 text-gray-500 cursor-not-allowed"
-                }`} 
+                  }`}
                 onClick={() => sellShares(currentMergingHotel)}
                 disabled={shares === 0}
               >
                 売却する
               </button>
-              <button 
-                className={`px-6 py-2 rounded transition-colors ${
-                  shares > 0 
-                    ? "bg-blue-500 text-white hover:bg-blue-600" 
+              <button
+                className={`px-6 py-2 rounded transition-colors ${shares > 0
+                    ? "bg-blue-500 text-white hover:bg-blue-600"
                     : "bg-gray-300 text-gray-500 cursor-not-allowed"
-                }`}
+                  }`}
                 onClick={() => keepShares()}
                 disabled={shares === 0}
               >
                 保持する
               </button>
-              <button 
-                className={`px-6 py-2 rounded transition-colors ${
-                  shares > 0 
-                    ? "bg-purple-500 text-white hover:bg-purple-600" 
+              <button
+                className={`px-6 py-2 rounded transition-colors ${shares > 0
+                    ? "bg-purple-500 text-white hover:bg-purple-600"
                     : "bg-gray-300 text-gray-500 cursor-not-allowed"
-                }`}
+                  }`}
                 onClick={() => exchangeShares(currentMergingHotel)}
                 disabled={shares === 0 || shares === 1}
               >
@@ -371,7 +368,7 @@ export default function StockHandler({ gameId, playerId, players }: { gameId: st
           {/* 自分が株主ではなく、自分のターンの場合は、スキップボタンを表示 */}
           {isCurrentPlayer && shares === 0 && (
             <div className="flex justify-center mt-4">
-              <button 
+              <button
                 className="px-6 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors"
                 onClick={() => handleMergeComplete()}
               >
