@@ -43,8 +43,8 @@ export default function PlayerHand({
             })}
           </div>
         </div>
-        <button 
-          className="w-1/4 text-center font-bold" 
+        <button
+          className="w-1/4 text-center font-bold"
           onClick={() => setFreePlacementMode(!freePlacementMode)}
         >
           {freePlacementMode ? "自由選択モード" : "固定選択モード"}
@@ -55,9 +55,9 @@ export default function PlayerHand({
             className={`${playerHand.length >= 6 ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
             disabled={playerHand.length >= 6 || freePlacementMode}
           >
-            <Image 
-              src="/images/draw.webp" 
-              alt="draw" 
+            <Image
+              src="/images/draw.webp"
+              alt="draw"
               width={64}
               height={64}
             />

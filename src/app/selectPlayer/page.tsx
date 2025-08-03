@@ -37,7 +37,7 @@ export default function SelectPlayer() {
       return;
     }
     
-    router.push(`/?playerId=${userId}`);
+    router.push(`/game?playerId=${userId}`);
   };
 
   const handlePlayer2Select = async () => {
@@ -69,7 +69,7 @@ export default function SelectPlayer() {
       console.error("プレイヤー更新エラー:", updateError);
       return;
     }
-    router.push(`/?playerId=${userId}`);
+    router.push(`/game?playerId=${userId}`);
   };
 
   return (
