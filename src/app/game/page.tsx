@@ -13,9 +13,9 @@ export default function Page() {
   return (
     <Suspense fallback={<div>Loading...</div>}>
       <GameProvider gameId={gameId!}>
-        <GamePageContent setGameId={setGameId} setPlayers={setPlayers} setPlayerId={setPlayerId} />
+        <GamePageContent players={players} setGameId={setGameId} setPlayers={setPlayers} setPlayerId={setPlayerId} />
         {gameId && (
-          <GameBoard gameId={gameId} playerId={playerId} players={players} />
+          <GameBoard gameId={gameId} playerId={playerId || ""} players={players} />
         )}
       </GameProvider>
     </Suspense>
@@ -23,10 +23,12 @@ export default function Page() {
 }
 
 function GamePageContent({
+  players,
   setGameId,
   setPlayers,
   setPlayerId,
 }: {
+  players: string[];
   setGameId: React.Dispatch<React.SetStateAction<string | null>>;
   setPlayers: React.Dispatch<React.SetStateAction<string[]>>;
   setPlayerId: React.Dispatch<React.SetStateAction<string | null>>;
@@ -111,7 +113,7 @@ function GamePageContent({
           };
 
           const updatedPlayerIds = await fetchGamePlayers(gameId);
-          console.log('プレイヤーリスト更新:', { 前: players, 後: updatedPlayerIds });
+          console.log('プレイヤーリスト更新:', { 前: players || [], 後: updatedPlayerIds });
           setPlayers(updatedPlayerIds);
         }
       )
@@ -120,7 +122,7 @@ function GamePageContent({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [setGameId, setPlayers, router, gameId]);
+  }, [setGameId, setPlayers, router, gameId, players]);
 
   useEffect(() => {
     // プレイヤーIDが指定されている場合はそのIDを設定

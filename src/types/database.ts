@@ -85,7 +85,7 @@ export interface GameLog {
   log_type: string;
   message: string;
   timestamp: string;
-  data?: any;
+  data?: Record<string, unknown>;
 }
 
 // UI specific types

@@ -88,7 +88,7 @@ export const GameProvider = ({ gameId, children }: { gameId: string, children: R
           // current_turnが存在する場合は更新（nullでも更新する）
           if (payload.new.hasOwnProperty('current_turn')) {
             console.log("Current Turn after:", payload.new.current_turn);
-            setCurrentTurn(payload.new.current_turn);
+            setCurrentTurn(payload.new.current_turn || null);
           }
           // statusが存在する場合は更新
           if (payload.new.status) {

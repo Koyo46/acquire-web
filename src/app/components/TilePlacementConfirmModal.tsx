@@ -3,7 +3,7 @@ import { hotelColors } from '@/src/utils/constants';
 
 interface Hotel {
   name: string;
-  tiles: Array<{ col: number; row: number }>;
+  tiles: Array<{ col: number; row: string }>;
 }
 
 interface MergeInfo {

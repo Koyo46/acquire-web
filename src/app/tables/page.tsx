@@ -106,7 +106,7 @@ export default function TablesPage() {
 
       // 各テーブルのプレイヤー情報を取得
       const tablesWithPlayerInfo = await Promise.all(
-        (tablesData || []).map(async (table: any) => {
+        (tablesData || []).map(async (table: { id: string; status: string; current_turn: number; }) => {
           console.log(`テーブル ${table.id.slice(0, 8)} のプレイヤー情報取得中...`);
           
           const { data: gamePlayersData, error: gamePlayersError } = await supabase
@@ -145,13 +145,14 @@ export default function TablesPage() {
             max_players: 6, // デフォルト値
             created_at: new Date().toISOString(), // 仮の作成日時
             current_players: players.length,
-            players: players
+            players: players,
+            current_turn: table.current_turn?.toString() || null
           };
         })
       );
 
       console.log('テーブル一覧更新完了:', tablesWithPlayerInfo.length, '件');
-      setTables(tablesWithPlayerInfo);
+      setTables(tablesWithPlayerInfo as TablePanelData[]);
     } catch (error) {
       console.error("テーブル取得エラー:", error);
     } finally {
@@ -343,6 +344,7 @@ export default function TablesPage() {
     }
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleCreateTable = async (tableName: string, _maxPlayers: number) => {
     try {
       // UUIDを生成

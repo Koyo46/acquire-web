@@ -215,6 +215,7 @@ export const useStockStore = create<StockState>((set, get) => ({
     }
   },
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   subscribeToChanges: (gameId: string, players: Player[]) => {
     const hotelChannel = supabase
       .channel(`hotel_changes_${gameId}`)
