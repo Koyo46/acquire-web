@@ -25,39 +25,72 @@ export default function GameBoard({ gameId, playerId, players }: { gameId: strin
   // ゲームログの状態
   const [gameLogs, setGameLogs] = useState<LogEntry[]>([]);
   const [showLogModal, setShowLogModal] = useState(false);
+  const [playersWithUsernames, setPlayersWithUsernames] = useState<Player[]>([]);
 
   useEffect(() => {
     console.log("mergingHotels", mergingHotels);
   }, [mergingHotels]);
 
+  // プレイヤーの実際のユーザー名を取得
+  useEffect(() => {
+    const fetchPlayerUsernames = async () => {
+      if (players.length > 0) {
+        console.log('players変更検知 - ユーザー名取得開始:', players);
+        const { data: usersData, error } = await supabase
+          .from('users')
+          .select('id, username')
+          .in('id', players);
+        
+        if (error) {
+          console.error('ユーザー名取得エラー:', error);
+          // エラーの場合は仮の名前を使用
+          const playerObjects: Player[] = players.map(id => ({
+            id,
+            username: `プレイヤー${id.slice(0, 8)}`
+          }));
+          setPlayersWithUsernames(playerObjects);
+          // 即座にstockStore更新
+          console.log('players変更 - 即座にstockStore更新:', playerObjects);
+          updateAll(gameId, playerObjects);
+        } else {
+          const playerObjects: Player[] = usersData.map(user => ({
+            id: user.id,
+            username: user.username
+          }));
+          setPlayersWithUsernames(playerObjects);
+          console.log('プレイヤー情報取得成功:', playerObjects);
+          // 即座にstockStore更新
+          console.log('players変更 - 即座にstockStore更新:', playerObjects);
+          updateAll(gameId, playerObjects);
+        }
+      }
+    };
+    
+    fetchPlayerUsernames();
+  }, [players, gameId, updateAll]);
+
   useEffect(() => {
     const initializeData = async () => {
-      if (!isInitialized && players.length > 0) {
-        const playerObjects: Player[] = players.map(id => ({
-          id,
-          username: `プレイヤー${id}`
-        }));
-        await updateAll(gameId, playerObjects);
+      if (!isInitialized && playersWithUsernames.length > 0) {
+        await updateAll(gameId, playersWithUsernames);
       }
     };
     initializeData();
-  }, [gameId, players, isInitialized, updateAll]);
+  }, [gameId, playersWithUsernames, isInitialized, updateAll]);
+
 
   useEffect(() => {
-    const playerObjects: Player[] = players.map(id => ({
-      id,
-      username: `プレイヤー${id}`
-    }));
-    const unsubscribe = subscribeToChanges(gameId, playerObjects);
-    return () => {
-      if (unsubscribe) unsubscribe();
-    };
-  }, [gameId, players, subscribeToChanges]);
+    if (playersWithUsernames.length > 0) {
+      const unsubscribe = subscribeToChanges(gameId, playersWithUsernames);
+      return () => {
+        if (unsubscribe) unsubscribe();
+      };
+    }
+  }, [gameId, playersWithUsernames, subscribeToChanges]);
   
-  // ゲームログを取得する関数をより頻繁に呼び出し、デバッグ情報を追加
+  // ゲームログを取得する関数
   const fetchGameLogs = async () => {
     try {
-      console.log("ゲームログの取得を試行 - gameId:", gameId);
       const { data, error } = await supabase
         .from('game_logs')
         .select('*')
@@ -71,7 +104,6 @@ export default function GameBoard({ gameId, playerId, players }: { gameId: strin
       }
       
       if (data) {
-        console.log(`ゲームログ ${data.length}件 取得成功:`, data.slice(0, 3)); // 最新3件のみ表示
         const formattedLogs = data.map(log => ({
           id: log.id,
           type: log.log_type,
@@ -79,6 +111,11 @@ export default function GameBoard({ gameId, playerId, players }: { gameId: strin
           timestamp: new Date(log.timestamp).getTime(),
           data: log.data
         }));
+        
+        // 実際にログが変更された場合のみログ出力
+        if (JSON.stringify(formattedLogs) !== JSON.stringify(gameLogs)) {
+          console.log(`ゲームログ ${data.length}件 取得成功:`, data.slice(0, 3));
+        }
         
         setGameLogs(formattedLogs);
       }

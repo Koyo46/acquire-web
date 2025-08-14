@@ -6,9 +6,11 @@ import { useGame } from "@/src/app/contexts/GameContext";
 import { getDividendByHotelName, getStockPriceByHotelName } from "@/src/utils/hotelStockBoard";
 import { calculateTopInvestors } from "@/src/utils/calculateTopInvestors";
 import { hotelColors, hotelImages } from "@/src/utils/constants";
+import { isDevelopment, generateDevTileOrder } from "@/src/utils/environment";
 import GameBoard from "./grid/GameBoard";
 import PlayerHand from "./grid/PlayerHand";
 import HotelList from "./grid/HotelList";
+import { TilePlacementConfirmModal } from "./TilePlacementConfirmModal";
 
 export default function Grid({ gameId, playerId, players }: { gameId: string, playerId: string, players: string[] }) {
 
@@ -19,6 +21,13 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
   const [playerHand, setPlayerHand] = useState<number[]>([]);
   const [pendingTile, setPendingTile] = useState<{ col: number; row: string } | null>(null);
   const [confirming, setConfirming] = useState(false);
+  const [pendingMergeInfo, setPendingMergeInfo] = useState<{
+    mergingHotels: { id: number; name: string; tiles: { col: number; row: string }[] }[];
+    survivingHotel: { id: number; name: string; tiles: { col: number; row: string }[] };
+    cannotMerge: boolean;
+    largeHotels?: { id: number; name: string; tiles: { col: number; row: string }[] }[];
+  } | null>(null);
+  const [selectedMergeDirection, setSelectedMergeDirection] = useState(0); // 0: デフォルト, 1: 交換
   const gameContext = useGame();
   const { currentTurn, endTurn, fetchGameStarted } = gameContext || {};
   const { setMergingHotels, setPreMergeHotelData, setCurrentMergingHotel, setMergingPlayersQueue, setCurrentMergingPlayer } = gameContext || {};
@@ -31,6 +40,7 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
   // 開発中は自由配置可能
   const [freePlacementMode, setFreePlacementMode] = useState(false);
   const [stocksBoughtThisTurn, setStocksBoughtThisTurn] = useState(0);
+  const [canPurchaseStock, setCanPurchaseStock] = useState(false);
   
   // ゲームログ関連の状態を削除
 
@@ -96,8 +106,8 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
     fetchData();
 
     const channel = supabase
-      .channel("tiles")
-      .on("postgres_changes", { event: "*", schema: "public", table: "tiles" }, async () => {
+      .channel(`tiles_${gameId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "tiles", filter: `game_id=eq.${gameId}` }, async () => {
         fetchData();
       })
       .subscribe();
@@ -117,18 +127,16 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
     };
     fetchData();
 
-    const channel = supabase
-      .channel("game_tables")
-      .on("postgres_changes", { event: "*", schema: "public", table: "game_tables" }, async () => {
-        const isGameStarted = await fetchGameStarted(gameId);
-        setGameStarted(isGameStarted);
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    // リアルタイム監視はGameContextに一元化
+    // 初期状態のみ取得
   }, [gameId, fetchGameStarted]);
+
+  // GameContextのgameStartedを監視してローカル状態を更新
+  useEffect(() => {
+    if (gameStarted !== undefined) {
+      setGameStarted(gameStarted);
+    }
+  }, [gameStarted]);
 
   const fetchTileKindById = useCallback(async (gameId: string, tileId: number) => {
     const { data, error } = await supabase
@@ -174,8 +182,8 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
     fetchData(); // 初回ロード
 
     const channel = supabase
-      .channel("hands")
-      .on("postgres_changes", { event: "*", schema: "public", table: "hands" }, async () => {
+      .channel(`hands_${gameId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "hands", filter: `game_id=eq.${gameId}` }, async () => {
         fetchData();
       })
       .subscribe();
@@ -201,6 +209,19 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
     // tier: "low" | "medium" | "high";
   }[]>([]);
 
+  // 株券購入可能状態を更新
+  useEffect(() => {
+    const updateCanPurchaseStock = async () => {
+      if (isMyTurn && putTile) {
+        const result = await checkStockPurchasePossible();
+        setCanPurchaseStock(result);
+      } else {
+        setCanPurchaseStock(false);
+      }
+    };
+    updateCanPurchaseStock();
+  }, [isMyTurn, putTile, stocksBoughtThisTurn, establishedHotels]);
+
   const completeHotelList = useMemo(() => {
     const allHotels = ["空", "雲", "晴", "霧", "雷", "嵐", "雨"]; // すべてのホテル名
     const existingHotels = establishedHotels.reduce((acc, hotel) => {
@@ -215,10 +236,12 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
   }, [establishedHotels]);
 
   const dealTiles = async () => {
+    console.log("dealTiles 実行開始:", { gameId, players });
+    
     // 空いているタイルを取得
     const { data: availableTiles, error } = await supabase
       .from("tiles")
-      .select("id")
+      .select("id, tile_kind")
       .eq("game_id", gameId)
       .eq("placed", false)
       .eq("dealed", false);
@@ -228,41 +251,108 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
       return;
     }
 
-    for (let i = 0; i < players.length; i++) {
-      for (let j = 0; j < 6; j++) {
-        // ランダムに1枚補充を試みる
-        let newTile;
-        do {
-          newTile = availableTiles.sort(() => Math.random() - 0.5)[0];
-          if (newTile) {
-            availableTiles.splice(availableTiles.indexOf(newTile), 1);
+    console.log("利用可能なタイル数:", availableTiles?.length);
+
+    // 開発環境の場合は事前定義されたタイル配布パターンを使用
+    if (isDevelopment()) {
+      console.log("開発環境: 事前定義されたタイル配布パターンを使用");
+      const devTileOrder = generateDevTileOrder(players.length);
+      let tileIndex = 0;
+
+      for (let i = 0; i < players.length; i++) {
+        for (let j = 0; j < 6; j++) {
+          if (tileIndex >= devTileOrder.length) {
+            console.log("タイル配布パターンが終了:", tileIndex);
+            break;
           }
-        } while (!newTile);
+          
+          const targetTileKind = devTileOrder[tileIndex];
+          // "1A" -> { col: 1, row: "A" } に変換してtile_kind（数値）に変換
+          const col = parseInt(targetTileKind.match(/\d+/)?.[0] || "0");
+          const row = targetTileKind.match(/[A-I]/)?.[0] || "A";
+          const targetTileKindNumber = positionToTileKind(col, row);
+          const targetTile = availableTiles.find(tile => tile.tile_kind === targetTileKindNumber);
+          
+          console.log(`プレイヤー${i+1}に配布中:`, {
+            tileIndex,
+            targetTileKind,
+            targetTileKindNumber,
+            targetTile: targetTile ? targetTile.id : 'なし',
+            playerId: players[i]
+          });
+          
+          if (targetTile) {
+            // 手牌に追加
+            const { error: insertError } = await supabase
+              .from("hands")
+              .insert({ game_id: gameId, player_id: players[i], tile_id: targetTile.id });
 
+            if (insertError) {
+              console.error("手牌追加エラー:", insertError);
+            } else {
+              console.log("手牌追加成功:", { playerId: players[i], tileId: targetTile.id });
+            }
 
-        // 手牌に追加
-        const { error: insertError } = await supabase
-          .from("hands")
-          .insert({ game_id: gameId, player_id: players[i], tile_id: newTile.id });
+            // タイルを配付済みにする
+            const { error: updateError } = await supabase
+              .from("tiles")
+              .update({ dealed: true })
+              .eq("game_id", gameId)
+              .eq("id", targetTile.id);
 
-        if (insertError) {
-          console.error("手牌追加エラー:", insertError);
+            if (updateError) {
+              console.error("タイル配付エラー:", updateError);
+            }
+
+            // 使用済みタイルを配列から削除
+            availableTiles.splice(availableTiles.indexOf(targetTile), 1);
+          } else {
+            console.warn("タイルが見つかりません:", targetTileKind);
+          }
+          tileIndex++;
         }
+      }
+    } else {
+      // 本番環境の場合は従来のランダム配布を使用
+      console.log("本番環境: ランダムタイル配布を使用");
+      for (let i = 0; i < players.length; i++) {
+        for (let j = 0; j < 6; j++) {
+          // ランダムに1枚補充を試みる
+          let newTile;
+          do {
+            newTile = availableTiles.sort(() => Math.random() - 0.5)[0];
+            if (newTile) {
+              availableTiles.splice(availableTiles.indexOf(newTile), 1);
+            }
+          } while (!newTile);
 
-        // タイルを配付済みにする
-        const { error: updateError } = await supabase
-          .from("tiles")
-          .update({ dealed: true })
-          .eq("game_id", gameId)
-          .eq("id", newTile.id);
+          // 手牌に追加
+          const { error: insertError } = await supabase
+            .from("hands")
+            .insert({ game_id: gameId, player_id: players[i], tile_id: newTile.id });
 
-        if (updateError) {
-          console.error("タイル配付エラー:", updateError);
+          if (insertError) {
+            console.error("手牌追加エラー:", insertError);
+          }
+
+          // タイルを配付済みにする
+          const { error: updateError } = await supabase
+            .from("tiles")
+            .update({ dealed: true })
+            .eq("game_id", gameId)
+            .eq("id", newTile.id);
+
+          if (updateError) {
+            console.error("タイル配付エラー:", updateError);
+          }
         }
       }
     }
+    
+    // ゲーム開始時は最初のプレイヤーをターンに設定
+    const firstPlayerId = players[0];
     if (endTurn) {
-      await endTurn(nextPlayerId);
+      await endTurn(firstPlayerId);
     }
     await supabase.from("game_tables").update({ status: "started" }).eq("id", gameId);
     await supabase.from("users").update({ balance: 6000 }).eq("game_id", gameId);
@@ -374,7 +464,12 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
   };
 
   const handleTilePlacement = async (col: number, row: string) => {
-    if (confirming) return; // 確定待ちのときは配置できない
+    if (confirming || putTile) return; // 確定待ちまたはタイル配置済みのときは配置できない
+
+    // 合併をシミュレート
+    const mergeInfo = simulateTilePlacement(col, row);
+    setPendingMergeInfo(mergeInfo);
+    setSelectedMergeDirection(0); // デフォルトの方向にリセット
 
     setPendingTile({ col, row }); // 配置予定のタイルを保存
     setConfirming(true); // 確定ボタンを表示
@@ -385,6 +480,12 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
   const cancelTilePlacement = () => {
     setPendingTile(null);
     setConfirming(false);
+    setPendingMergeInfo(null);
+    setSelectedMergeDirection(0);
+  };
+
+  const swapMergeDirection = () => {
+    setSelectedMergeDirection(prev => prev === 0 ? 1 : 0);
   };
 
   // ホテル選択モーダルの状態
@@ -513,8 +614,8 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
     };
     fetchData();
     const channel = supabase
-      .channel("hotel_investors")
-      .on("postgres_changes", { event: "*", schema: "public", table: "hotel_investors" }, async () => {
+      .channel(`hotel_investors_${gameId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "hotel_investors", filter: `game_id=eq.${gameId}` }, async () => {
         const fetchedHotelInvestors = await fetchHotelInvestors(gameId);
         setHotelInvestors(fetchedHotelInvestors);
       })
@@ -586,8 +687,62 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
     return adjacentTiles;
   };
 
+  // タイル配置をシミュレートして合併情報を取得
+  const simulateTilePlacement = (col: number, row: string) => {
+    const adjacentTiles = getAdjacentTiles(col, row);
+    const adjacentPlacedTiles = adjacentTiles.filter((tile) =>
+      placedTiles.some((t) => t.col === tile.col && t.row === tile.row)
+    );
+
+    // 既存のホテルを検索
+    const foundAdjacentHotels = establishedHotels.filter((hotel) =>
+      hotel.tiles.some((tile) =>
+        adjacentPlacedTiles.some((adjTile) => tile.col === adjTile.col && tile.row === adjTile.row)
+      )
+    );
+
+    // 合併が発生しない場合
+    if (foundAdjacentHotels.length <= 1) {
+      return null;
+    }
+
+    // サイズ11以上のホテルが2つ以上ある場合
+    const largeHotels = foundAdjacentHotels.filter(hotel => hotel.tiles.length >= 11);
+    if (largeHotels.length >= 2) {
+      return {
+        mergingHotels: [],
+        survivingHotel: largeHotels[0],
+        cannotMerge: true,
+        largeHotels
+      };
+    }
+
+    // 合併が発生する場合
+    const largestHotel = foundAdjacentHotels.reduce((prev, current) =>
+      prev.tiles.length > current.tiles.length ? prev : current
+    );
+    const mergingHotels = foundAdjacentHotels.filter(hotel => hotel.name !== largestHotel.name);
+
+    return {
+      mergingHotels,
+      survivingHotel: largestHotel,
+      cannotMerge: false
+    };
+  };
+
   // タイルをクリックしたときの処理
-  const placeTileOnBoard = async (gameId: string, col: number, row: string) => {
+  const placeTileOnBoard = async (
+    gameId: string, 
+    col: number, 
+    row: string,
+    mergeInfo?: {
+      mergingHotels: { id: number; name: string; tiles: { col: number; row: string }[] }[];
+      survivingHotel: { id: number; name: string; tiles: { col: number; row: string }[] };
+      cannotMerge: boolean;
+      largeHotels?: { id: number; name: string; tiles: { col: number; row: string }[] }[];
+    } | null,
+    mergeDirection?: number
+  ) => {
     if (!gameId) return;
 
     const newTile = { col, row };
@@ -649,9 +804,19 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
       ]);
       const uniqueMergedTiles = Array.from(new Set(mergedTiles));
 
-      const largestHotel = foundAdjacentHotels.reduce((prev, current) =>
+      let largestHotel = foundAdjacentHotels.reduce((prev, current) =>
         prev.tiles.length > current.tiles.length ? prev : current
       );
+      
+      // 同サイズのホテルがある場合、合併方向を考慮
+      if (mergeInfo && mergeDirection === 1) {
+        const sameSizeHotels = foundAdjacentHotels.filter(hotel => hotel.tiles.length === largestHotel.tiles.length);
+        if (sameSizeHotels.length > 1) {
+          // 合併方向を交換（mergeDirection === 1の場合）
+          largestHotel = sameSizeHotels.find(hotel => hotel.id !== largestHotel.id) || largestHotel;
+        }
+      }
+      
       console.log(largestHotel);
       console.log("foundAdjacentHotels", foundAdjacentHotels);
       const hotelsToProcess = foundAdjacentHotels.filter(hotel => hotel.name !== largestHotel.name);
@@ -733,10 +898,23 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
       }
 
       // 合併後のホテル情報を更新
+      // 合併されるすべてのホテルのタイルを収集
+      const allMergedTiles = [
+        newTile,
+        ...adjacentPlacedTiles,
+        ...foundAdjacentHotels.flatMap(hotel => hotel.tiles)
+      ];
+      
+      // 重複を除去
+      const uniqueTiles = allMergedTiles.filter((tile, index, self) => 
+        index === self.findIndex(t => t.col === tile.col && t.row === tile.row)
+      );
+      
       const updatedLargestHotel = {
         ...largestHotel,
-        tiles: [...largestHotel.tiles, newTile, ...adjacentPlacedTiles]
+        tiles: uniqueTiles
       };
+      
       updatedHotels = updatedHotels.map(h =>
         h.id === largestHotel.id ? updatedLargestHotel : h
       ).filter(h => !hotelsToProcess.some(sh => sh.id === h.id));
@@ -776,23 +954,12 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
   const confirmTilePlacement = async () => {
     if (!pendingTile) return;
 
-    const tileId = positionToTileKind(pendingTile.col, pendingTile.row);
-    // 既存のホテルを検索
-    const adjacentTiles = getAdjacentTiles(pendingTile.col, pendingTile.row);
-    const adjacentPlacedTiles = adjacentTiles.filter((tile) =>
-      placedTiles.some((t) => t.col === tile.col && t.row === tile.row)
-    );
-    const updatedHotels = [...establishedHotels];
-    const foundAdjacentHotels = updatedHotels.filter((hotel) =>
-      hotel.tiles.some((tile) =>
-        adjacentPlacedTiles.some((adjTile) => tile.col === adjTile.col && tile.row === adjTile.row)
-      )
-    );
-    const hotelsWithMoreThan11Tiles = foundAdjacentHotels.filter(hotel => hotel.tiles.length >= 11);
-    if (hotelsWithMoreThan11Tiles.length >= 2) {
-      alert("タイルを配置できません");
+    // 配置不可の場合は処理を中断
+    if (pendingMergeInfo?.cannotMerge) {
       return;
     }
+
+    const tileId = positionToTileKind(pendingTile.col, pendingTile.row);
     
     // ユーザー名を取得してログに使用
     const { data: userInfo } = await supabase
@@ -808,7 +975,7 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
       .from("tiles")
       .update({ placed: true })
       .eq("game_id", gameId)
-      .eq("id", tileId);
+      .eq("tile_kind", tileId);
 
     if (error) {
       console.error("タイル配置エラー:", error);
@@ -827,11 +994,15 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
     
     // 状態をリセット（先にポップアップを非表示にする）
     const tileCopy = { ...pendingTile };
+    const mergeInfoCopy = pendingMergeInfo;
+    const mergeDirectionCopy = selectedMergeDirection;
     setPendingTile(null);
     setConfirming(false);
+    setPendingMergeInfo(null);
+    setSelectedMergeDirection(0);
     
-    // その後タイルの配置処理を実行
-    await placeTileOnBoard(gameId, tileCopy.col, tileCopy.row);
+    // その後タイルの配置処理を実行（合併方向情報を渡す）
+    await placeTileOnBoard(gameId, tileCopy.col, tileCopy.row, mergeInfoCopy, mergeDirectionCopy);
 
     setPutTile(true);
   };
@@ -966,11 +1137,76 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
     setSelectedTile(null);
   };
 
+
+  // 株券購入可能かチェックする関数
+  const checkStockPurchasePossible = async () => {
+    if (stocksBoughtThisTurn >= 3) {
+      return false;
+    }
+    
+    try {
+      // プレイヤーの所持金を取得
+      const { data: userData } = await supabase
+        .from("users")
+        .select("balance")
+        .eq("id", playerId)
+        .single();
+      
+      if (!userData) return false;
+      
+      const userBalance = userData.balance;
+      
+      // 存在するホテルのうち、購入可能な株券があるかチェック
+      for (const hotel of establishedHotels) {
+        const stockPrice = await getStockPriceByHotelName(hotel.name);
+        
+        if (userBalance >= stockPrice) {
+          // 株券の発行上限をチェック
+          const { data: totalSharesData } = await supabase
+            .from("hotel_investors")
+            .select("shares")
+            .eq("hotel_name", hotel.name)
+            .eq("game_id", gameId);
+          
+          const totalShares = totalSharesData?.reduce((sum, investor) => sum + investor.shares, 0) || 0;
+          
+          if (totalShares < 25) {
+            return true;
+          }
+        }
+      }
+      
+      return false;
+    } catch (error) {
+      console.error("株券購入可能チェックエラー:", error);
+      return false;
+    }
+  };
+
   const handleDrawAndEndTurn = async (currentPlayerId: string, nextPlayerId: string) => {
     try {
+      console.log("ターン終了処理開始:", { currentPlayerId, nextPlayerId });
+      
+      // ホテル設立中の場合はターン終了を中断
+      if (bornNewHotel) {
+        alert("ホテル設立可能なタイルがあります。先にホテル設立を確定してください。");
+        return; // 処理を中断
+      }
+      
+      // 株券購入可能かチェック
+      const canPurchaseStock = await checkStockPurchasePossible();
+      if (canPurchaseStock) {
+        const confirmSkip = confirm("株券が購入可能ですがスキップしてもよろしいですか？");
+        if (!confirmSkip) {
+          return; // 処理を中断
+        }
+      }
+      
       await drawTilesUntil6(currentPlayerId); // タイル補充
       if (endTurn) {
+        console.log("endTurn実行前:", currentTurn);
         await endTurn(nextPlayerId); // ターンエンド
+        console.log("endTurn実行後、期待値:", nextPlayerId);
         // ターン終了後に自分のターンではなくなる
         if (currentPlayerId === playerId) {
           setIsMyTurn(false);
@@ -1307,27 +1543,14 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
         tileKindToPosition={tileKindToPosition}
       />
 
-      {confirming && pendingTile && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center pt-80 z-50">
-          <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
-            <h3 className="text-lg font-bold mb-4">配置を確定しますか？</h3>
-            <div className="flex gap-4 justify-end">
-              <button
-                className="px-6 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors"
-                onClick={confirmTilePlacement}
-              >
-                確定する
-              </button>
-              <button
-                className="px-6 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
-                onClick={cancelTilePlacement}
-              >
-                キャンセル
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <TilePlacementConfirmModal
+        isOpen={confirming && pendingTile !== null}
+        mergeInfo={pendingMergeInfo}
+        selectedMergeDirection={selectedMergeDirection}
+        onConfirm={confirmTilePlacement}
+        onCancel={cancelTilePlacement}
+        onSwapMergeDirection={swapMergeDirection}
+      />
 
       {/* マージが発生した場合に表示されるポップアップ */}
       {gameContext?.mergingHotels && gameContext.mergingHotels.length > 0 && gameContext.currentMergingPlayer !== playerId && <MergePopup />}
@@ -1349,6 +1572,7 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
         bornNewHotel={bornNewHotel}
         handleBuyStock={handleBuyStock}
         handleHotelSelection={handleHotelSelection}
+        canPurchaseStock={canPurchaseStock}
       />
 
       <div className="mt-4 p-4 bg-white shadow rounded w-full max-w-screen-md">
