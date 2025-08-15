@@ -12,7 +12,7 @@ const hotelColors: { [key: string]: string } = {
   "雨": "bg-blue-400"
 };
 
-export default function PlayerStatus() {
+export default function PlayerStatus({ playerId }: { playerId: string }) {
   const playerStatuses = useStockStore((state) => state.playerStatuses);
   const isInitialized = useStockStore((state) => state.isInitialized);
   const prevPlayerStatuses = useRef(playerStatuses);
@@ -67,7 +67,14 @@ export default function PlayerStatus() {
         <tbody>
           {playerStatuses.map(player => (
             <tr key={player.id}>
-              <td className="border border-gray-300 px-4 py-2">{player.username}</td>
+              <td className="border border-gray-300 px-4 py-2">
+                {player.username}
+                <br />
+                {player.id === playerId && (
+                  
+                  <span className="text-blue-600 font-medium">（あなた）</span>
+                )}
+              </td>
               <td className="border border-gray-300 px-4 py-2  bg-gradient-to-r from-amber-300 to-lime-300">${player.balance}</td>
               {allHotels.map(hotel => (
                 <td key={hotel} className={`border border-gray-300 px-4 py-2 ${hotelColors[hotel]}`}>

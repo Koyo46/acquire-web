@@ -178,7 +178,7 @@ export default function GameBoard({ gameId, playerId, players }: { gameId: strin
         />
       </div>
       <div className="top-0 h-screen w-[600px]">
-        <PlayerStatus />
+        <PlayerStatus playerId={playerId} />
         <StockPriceTable />
       </div>
       
