@@ -627,12 +627,13 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
 
   //smallHotelsのデータが更新されたら検知するuseEffectを修正
   useEffect(() => {
+    // 空配列の場合は処理をスキップ
+    if (smallHotels.length === 0) return;
+    
     console.log("Updated smallHotels:", smallHotels);
     // 小さなホテルがある場合のみマージ処理を行う
-    if (smallHotels.length > 0) {
-      handleMerge(smallHotels);
-    }
-  }, [smallHotels, handleMerge]);
+    handleMerge(smallHotels);
+  }, [smallHotels]); // handleMergeを依存配列から削除
   // 配当を分配
   const dealDividend = async (userId: string, dividend: number) => {
     const { data: users, error: fetchError } = await supabase

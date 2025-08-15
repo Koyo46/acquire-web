@@ -97,7 +97,9 @@ export const GameProvider = ({ gameId, children }: { gameId: string, children: R
           }
         }
       })
-      .subscribe();
+      .subscribe((status) => {
+        console.log("リアルタイムチャンネル接続状態:", status);
+      });
 
     return () => {
       supabase.removeChannel(channel);
@@ -107,12 +109,44 @@ export const GameProvider = ({ gameId, children }: { gameId: string, children: R
   const endTurn = async (nextPlayerId: string) => {
     if (!gameId) return;
 
-    const { error } = await supabase
-      .from("game_tables")
-      .update({ current_turn: nextPlayerId })
-      .eq("id", gameId);
+    console.log("endTurn関数実行開始:", { gameId, nextPlayerId });
+    
+    try {
+      // データベースを更新
+      const { data, error } = await supabase
+        .from("game_tables")
+        .update({ current_turn: nextPlayerId })
+        .eq("id", gameId)
+        .select("current_turn");
 
-    if (error) console.error("ターン更新エラー:", error);
+      if (error) {
+        console.error("ターン更新エラー:", error);
+        throw error;
+      }
+
+      console.log("ターン更新成功:", { 
+        更新前: currentTurn, 
+        更新後: data?.[0]?.current_turn,
+        期待値: nextPlayerId 
+      });
+
+      // 更新が成功した場合、ローカル状態も即座に更新
+      if (data && data[0]?.current_turn === nextPlayerId) {
+        console.log("ローカル状態を即座に更新:", nextPlayerId);
+        setCurrentTurn(nextPlayerId);
+      } else {
+        console.warn("データベース更新とローカル状態の不一致:", {
+          期待値: nextPlayerId,
+          実際の値: data?.[0]?.current_turn
+        });
+      }
+
+    } catch (error) {
+      console.error("endTurn実行中にエラーが発生:", error);
+      // エラーが発生した場合は手動で状態を更新
+      console.log("エラー後のフォールバック処理: ローカル状態を手動更新");
+      setCurrentTurn(nextPlayerId);
+    }
   };
 
   const fetchGameStarted = async (gameId: string) => {

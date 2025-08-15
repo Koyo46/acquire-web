@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useMemo } from "react";
 import { useStockStore } from "@/src/store/stockStore";
 
 const hotelColors: { [key: string]: string } = {
@@ -23,9 +23,16 @@ export default function PlayerStatus() {
       prevPlayerStatuses.current = playerStatuses;
     }
   }, [playerStatuses]);
-  const allHotels = ["空", "雲", "晴", "霧", "雷", "嵐", "雨"];
 
-  if (!isInitialized) {
+  const allHotels = useMemo(() => ["空", "雲", "晴", "霧", "雷", "嵐", "雨"], []);
+
+  // 条件判定を厳密にして、表示の安定性を向上
+  const hasValidPlayerStatuses = useMemo(() => {
+    return Array.isArray(playerStatuses) && playerStatuses.length > 0;
+  }, [playerStatuses]);
+
+  // 初期化中の場合（ただし、playerStatusesが存在する場合は表示）
+  if (!isInitialized && !hasValidPlayerStatuses) {
     return (
       <div className="p-4">
         <div className="animate-pulse">
@@ -36,7 +43,8 @@ export default function PlayerStatus() {
     );
   }
 
-  if (!playerStatuses || playerStatuses.length === 0) {
+  // プレイヤーステータスが無効な場合（初期化済みでデータなし）
+  if (isInitialized && !hasValidPlayerStatuses) {
     return (
       <div className="p-4">
         <p className="text-gray-500">プレイヤー情報を読み込み中...</p>

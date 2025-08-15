@@ -67,7 +67,7 @@ export default function GameBoard({ gameId, playerId, players }: { gameId: strin
     };
     
     fetchPlayerUsernames();
-  }, [players, gameId, updateAll]);
+  }, [JSON.stringify(players), gameId]); // updateAllを依存配列から削除
 
   useEffect(() => {
     const initializeData = async () => {
@@ -76,7 +76,7 @@ export default function GameBoard({ gameId, playerId, players }: { gameId: strin
       }
     };
     initializeData();
-  }, [gameId, playersWithUsernames, isInitialized, updateAll]);
+  }, [gameId, playersWithUsernames, isInitialized]); // updateAllを依存配列から削除
 
 
   useEffect(() => {
