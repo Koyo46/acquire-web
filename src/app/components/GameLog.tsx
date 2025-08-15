@@ -48,9 +48,10 @@ const GameLog: React.FC<GameLogProps> = ({ gameLogs, setShowLogModal }) => {
       </button>
       <ul className="space-y-2">
         {displayLogs.map((log) => {
-          // 時刻フォーマット (HH:MM:SS)
-          const time = new Date(log.timestamp);
-          const timeStr = `${String(time.getHours()).padStart(2, '0')}:${String(time.getMinutes()).padStart(2, '0')}:${String(time.getSeconds()).padStart(2, '0')}`;
+          // 日本時間でフォーマット（標準的な方法）
+          const timeStr = new Date(log.timestamp).toLocaleTimeString('ja-JP', {
+            hour12: false
+          });
           
           // ログタイプに応じた色を指定
           let logColorClass = "text-white";
