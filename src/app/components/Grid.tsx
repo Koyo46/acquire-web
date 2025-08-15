@@ -7,6 +7,7 @@ import { getDividendByHotelName, getStockPriceByHotelName } from "@/src/utils/ho
 import { calculateTopInvestors } from "@/src/utils/calculateTopInvestors";
 import { hotelColors, hotelImages } from "@/src/utils/constants";
 import { isDevelopment, generateDevTileOrder } from "@/src/utils/environment";
+import { useStockStore } from "@/src/store/stockStore"; // useStockStoreを追加
 import GameBoard from "./grid/GameBoard";
 import PlayerHand from "./grid/PlayerHand";
 import HotelList from "./grid/HotelList";
@@ -1352,6 +1353,8 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
     if (setGameStarted) {
       setGameStarted(false);
     }
+    // useStockStoreの状態もリセット
+    useStockStore.getState().reset();
   };
 
   // 重複しているuseEffectを統合し、リアルタイム更新を改善

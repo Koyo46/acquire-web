@@ -65,7 +65,7 @@ export default function GameBoard({
               <div
                 key={`cell-${col}${row}`}
                 className={`w-10 h-10 flex items-center justify-center border 
-                  ${isInPlayerHand && !putTile ? 'border-red-500 border-2' : 'border-gray-400'} 
+                  ${isInPlayerHand ? 'border-red-500 border-2' : 'border-gray-400'} 
                   ${bornNewHotel ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}
                   ${hotel
                     ? hotelColors[hotel.name]

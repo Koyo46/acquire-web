@@ -45,6 +45,7 @@ type StockState = {
   fetchGamePlayers: (gameId: string) => Promise<Player[]>;
   updateAll: (gameId: string, players: Player[]) => Promise<void>;
   subscribeToChanges: (gameId: string, players: Player[]) => () => void;
+  reset: () => void; // リセット機能を追加
 };
 
 
@@ -264,5 +265,15 @@ export const useStockStore = create<StockState>((set, get) => ({
       userChannel.unsubscribe();
       gamePlayersChannel.unsubscribe();
     };
+  },
+
+  reset: () => {
+    set({
+      hotels: [],
+      hotelInvestors: [],
+      playerStatuses: [],
+      isInitialized: false,
+      error: null,
+    });
   }
 })); 
