@@ -895,7 +895,7 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
         
       addGameLog(
         'hotel_merge',
-        `${userData?.username || 'プレイヤー'} が ${largestHotel.name}ホテルに ${hotelsToProcess.map(h => h.name).join('、')} ホテルを吸収合併しました。`,
+        `${userData?.username || 'プレイヤー'} ： ${largestHotel.name}ホテルが ${hotelsToProcess.map(h => h.name).join('、')} ホテルを吸収合併しました。`,
         { 
           survivingHotel: largestHotel.name, 
           mergedHotels: hotelsToProcess.map(h => h.name),
