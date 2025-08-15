@@ -5,7 +5,6 @@ import StockTable from "./StockTable";
 import TurnManager from "./TurnManager";
 import PlayerStatus from "./PlayerStatus";
 import StockHandler from "./StockHandler";
-import { useGame } from "@/src/app/contexts/GameContext";
 import { useStockStore } from "@/src/store/stockStore";
 import StockPriceTable from "@/src/app/components/StockPriceTable";
 import GameLog, { LogEntry } from "@/src/app/components/GameLog";
@@ -17,7 +16,6 @@ type Player = {
 };
 
 export default function GameBoard({ gameId, playerId, players }: { gameId: string, playerId: string, players: string[] }) {
-  const { mergingHotels } = useGame() || {};
   const updateAll = useStockStore((state) => state.updateAll);
   const isInitialized = useStockStore((state) => state.isInitialized);
   const subscribeToChanges = useStockStore((state) => state.subscribeToChanges);
@@ -27,9 +25,7 @@ export default function GameBoard({ gameId, playerId, players }: { gameId: strin
   const [showLogModal, setShowLogModal] = useState(false);
   const [playersWithUsernames, setPlayersWithUsernames] = useState<Player[]>([]);
 
-  useEffect(() => {
-    console.log("mergingHotels", mergingHotels);
-  }, [mergingHotels]);
+
 
   // プレイヤーの実際のユーザー名を取得
   useEffect(() => {

@@ -255,57 +255,98 @@ export default function StockHandler({ gameId, playerId, players }: { gameId: st
   const exchangeShares = async (hotel: Hotel) => {
     if (!isCurrentPlayer) return;
 
+    console.log(`株券交換開始: ${hotel.name}, 保有株数: ${shares}, mergingHotels:`, mergingHotels);
+
     // 株式を2枚を1枚と交換する処理
     if (shares > 1 && mergingHotels && mergingHotels.length > 0) {
-      // 大きいホテルを見つける
-      const { data: largestHotel } = await supabase
-        .from("hotels")
-        .select("hotel_name")
+      // 吸収先ホテル（生き残るホテル）を見つける
+      // 最新のマージログから実際の吸収先ホテルを特定
+      console.log("現在処理中のホテル:", hotel.name);
+      
+      const { data: latestMergeLog } = await supabase
+        .from("game_logs")
+        .select("data")
         .eq("game_id", gameId)
-        .not("hotel_name", "eq", hotel.name)
-        .order("tile_ids", { ascending: false })
+        .eq("log_type", "hotel_merge")
+        .order("timestamp", { ascending: false })
         .limit(1)
         .single();
+      
+      console.log("最新のマージログ:", latestMergeLog);
+      
+      if (!latestMergeLog?.data?.survivingHotel) {
+        console.error("マージログから吸収先ホテルが見つかりませんでした");
+        return;
+      }
+      
+      const survivingHotelName = latestMergeLog.data.survivingHotel;
+      const mergedHotels = latestMergeLog.data.mergedHotels || [];
+      
+      console.log(`マージログから取得 - 吸収先: ${survivingHotelName}, 吸収されたホテル:`, mergedHotels);
+      
+      // 現在処理中のホテルがマージに関わっているかチェック
+      if (!mergedHotels.includes(hotel.name)) {
+        console.error(`現在処理中のホテル ${hotel.name} はマージに関わっていません`);
+        return;
+      }
 
-      if (largestHotel) {
-        // 既存の株を確認
-        const { data: existingShares } = await supabase
-          .from("hotel_investors")
-          .select("shares")
-          .eq("game_id", gameId)
-          .eq("user_id", playerId)
-          .eq("hotel_name", largestHotel.hotel_name)
-          .maybeSingle();
+            // 交換先ホテルの現在の株券総数をチェック
+      const { data: totalSharesData } = await supabase
+        .from("hotel_investors")
+        .select("shares")
+        .eq("hotel_name", survivingHotelName)
+        .eq("game_id", gameId);
 
-        if (existingShares) {
-          // 既存の株に追加
-          await supabase
-            .from("hotel_investors")
-            .update({ shares: existingShares.shares + 1 })
-            .eq("game_id", gameId)
-            .eq("user_id", playerId)
-            .eq("hotel_name", largestHotel.hotel_name);
-        } else {
-          // 新しく株を追加
-          await supabase
-            .from("hotel_investors")
-            .insert({
-              game_id: gameId,
-              user_id: playerId,
-              hotel_name: largestHotel.hotel_name,
-              shares: 1
-            });
-        }
+      const totalShares = totalSharesData?.reduce((sum, investor) => sum + investor.shares, 0) || 0;
+      
+      console.log(`株券交換チェック: ${survivingHotelName} 現在の総株数: ${totalShares}`);
+      
+      if (totalShares >= 25) {
+        console.error(`株券交換エラー: ${survivingHotelName}の株券は上限（25枚）に達しています`);
+        alert(`${survivingHotelName}の株券は上限（25枚）に達しているため、交換できません。`);
+        return;
+      }
 
-        // 古い株を削除
+      // 既存の株を確認
+      const { data: existingShares } = await supabase
+        .from("hotel_investors")
+        .select("shares")
+        .eq("game_id", gameId)
+        .eq("user_id", playerId)
+        .eq("hotel_name", survivingHotelName)
+        .maybeSingle();
+
+      if (existingShares) {
+        // 既存の株に追加
         await supabase
           .from("hotel_investors")
-          .update({ shares: shares - 2 })
+          .update({ shares: existingShares.shares + 1 })
           .eq("game_id", gameId)
           .eq("user_id", playerId)
-          .eq("hotel_name", hotel.name);
+          .eq("hotel_name", survivingHotelName);
+      } else {
+        // 新しく株を追加
+        await supabase
+          .from("hotel_investors")
+          .insert({
+            game_id: gameId,
+            user_id: playerId,
+            hotel_name: survivingHotelName,
+            shares: 1
+          });
       }
+
+      // 古い株を2枚減らす
+      await supabase
+        .from("hotel_investors")
+        .update({ shares: shares - 2 })
+        .eq("game_id", gameId)
+        .eq("user_id", playerId)
+        .eq("hotel_name", hotel.name);
     }
+
+    // マージ処理を次に進める
+    await handleMergeComplete();
   };
 
   // 自分のターンでない場合と、自分が株主でない場合の表示を変更
