@@ -467,6 +467,25 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
   const handleTilePlacement = async (col: number, row: string) => {
     if (confirming || putTile) return; // 確定待ちまたはタイル配置済みのときは配置できない
 
+    // 新しいホテル設立になるかチェック
+    const adjacentTiles = getAdjacentTiles(col, row);
+    const adjacentPlacedTiles = adjacentTiles.filter((tile) =>
+      placedTiles.some((t) => t.col === tile.col && t.row === tile.row)
+    );
+
+    // 既存のホテルを検索
+    const foundAdjacentHotels = establishedHotels.filter((hotel) =>
+      hotel.tiles.some((tile) =>
+        adjacentPlacedTiles.some((adjTile) => tile.col === adjTile.col && tile.row === adjTile.row)
+      )
+    );
+
+    // 新しいホテル設立の条件かつ7つ制限チェック
+    if (foundAdjacentHotels.length === 0 && adjacentPlacedTiles.length >= 1 && establishedHotels.length >= 7) {
+      alert("ホテルは最大7つまでしか設立できません。別のタイルを選択してください。");
+      return; // 処理を中止
+    }
+
     // 合併をシミュレート
     const mergeInfo = simulateTilePlacement(col, row);
     setPendingMergeInfo(mergeInfo);
@@ -938,6 +957,13 @@ export default function Grid({ gameId, playerId, players }: { gameId: string, pl
       }
       setSmallHotels([]);
     } else if (adjacentPlacedTiles.length >= 1) {
+      // 8件目のホテル設立を防ぐチェック
+      if (establishedHotels.length >= 7) {
+        alert("ホテルは最大7つまでしか設立できません。別のタイルを選択してください。");
+        // タイル配置を無効にして、プレイヤーに再選択を促す
+        return;
+      }
+      
       // 新しいホテルを設立
       setBornNewHotel(true);
       setSelectedTile({ col, row, adjacentTiles: adjacentPlacedTiles });
