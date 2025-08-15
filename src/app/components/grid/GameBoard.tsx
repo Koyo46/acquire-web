@@ -31,7 +31,6 @@ export default function GameBoard({
   pendingTile,
   establishedHotels,
   bornNewHotel,
-  putTile,
   isMyTurn,
   freePlacementMode,
   handleTilePlacement,
